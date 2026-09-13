@@ -30,6 +30,16 @@ HEALING_STALE_SECONDS = 120.0
 EMPTY_STREAK_THRESHOLD = 3
 
 
+def _normalize_authuser(value: str | int | None) -> str | None:
+    """Normalize Google's multi-login selector; account 0 is the legacy default."""
+    if value is None:
+        return None
+    value = str(value).strip()
+    if not value or value == "0":
+        return None
+    return value
+
+
 def _is_5xx(exc: Exception) -> bool:
     """判断异常是否为 5xx（含 Google 503 限流），这类可换账号 failover 重试。"""
     return isinstance(exc, HTTPStatusError) and 500 <= exc.status_code < 600
