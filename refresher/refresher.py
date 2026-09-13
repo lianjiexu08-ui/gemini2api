@@ -9,6 +9,9 @@ import os
 import sys
 import json
 import time
+import base64
+import hashlib
+import hmac
 import requests as http_requests
 from playwright.sync_api import sync_playwright
 
@@ -29,6 +32,30 @@ if _interval_seconds is not None:
 else:
     REFRESH_INTERVAL = int(float(os.environ.get("REFRESH_INTERVAL", "8")) * 60)
 SINGLE_RUN = os.environ.get("SINGLE_RUN", "false").lower() == "true"
+
+
+def fetch_2fa_code(url, key):
+    """Fetch a third-party OTP; accepts plain text or common JSON field names."""
+    headers = {"Authorization": f"Bearer {key}", "X-API-Key": key} if key else {}
+    resp = http_requests.get(url, headers=headers, timeout=15)
+    resp.raise_for_status()
+    try:
+        data = resp.json()
+        for name in ("code", "otp", "token", "verification_code"):
+            if data.get(name): return str(data[name]).strip()
+    except ValueError:
+        pass
+    return resp.text.strip()
+
+
+def generate_totp(secret, digits=6, period=30):
+    compact = secret.replace(" ", "").upper()
+    raw = base64.b32decode(compact + "=" * ((8 - len(compact) % 8) % 8))
+    counter = int(time.time()) // period
+    digest = hmac.new(raw, counter.to_bytes(8, "big"), hashlib.sha1).digest()
+    offset = digest[-1] & 0x0F
+    value = (int.from_bytes(digest[offset:offset + 4], "big") & 0x7FFFFFFF) % (10 ** digits)
+    return str(value).zfill(digits)
 
 
 def load_accounts():
@@ -101,6 +128,19 @@ def refresh_account(browser, account):
     try:
         page.goto("https://gemini.google.com/app", timeout=90000, wait_until="domcontentloaded")
         time.sleep(15)
+
+        # Cookie 失效时，尝试使用服务器加密凭据完成登录；Google 风控/手机确认仍会停在页面。
+        if account.get("email") and account.get("password") and "accounts.google.com" in page.url:
+            email_box = page.locator('input[type="email"]').first
+            if email_box.count():
+                email_box.fill(account["email"]); page.get_by_role("button", name="Next").click(); time.sleep(3)
+            pw_box = page.locator('input[type="password"]').first
+            if pw_box.count():
+                pw_box.fill(account["password"]); page.get_by_role("button", name="Next").click(); time.sleep(4)
+            if account.get("totp_secret") or (account.get("totp_url") and account.get("totp_key")):
+                code = generate_totp(account["totp_secret"]) if account.get("totp_secret") else fetch_2fa_code(account["totp_url"], account["totp_key"])
+                code_box = page.locator('input[name="totpPin"], input[name="code"], input[type="tel"]').first
+                if code_box.count(): code_box.fill(code); page.get_by_role("button", name="Next").click(); time.sleep(8)
 
         cookies = context.cookies()
         psid = next((c["value"] for c in cookies if c["name"] == "__Secure-1PSID"), None)
@@ -181,9 +221,7 @@ def refresh_all():
     results = []
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=[
+        launch_args = [
                 "--no-sandbox",
                 "--disable-setuid-sandbox",
                 "--disable-gpu",
@@ -192,10 +230,19 @@ def refresh_all():
                 "--no-zygote",
                 "--disable-extensions",
             ]
-        )
 
         for i, account in enumerate(accounts):
+            # credentials are fetched only for this run and never written to refresher output
+            try:
+                h = {"Authorization": f"Bearer {ADMIN_KEY}"} if ADMIN_KEY else {}
+                cr = http_requests.get(f"{GEMINI2API_URL}/admin/accounts/{account['id']}/credentials", headers=h, timeout=10)
+                if cr.ok: account.update(cr.json())
+            except Exception as exc:
+                print(f"  [{account.get('id')}] credential fetch skipped: {exc}")
+            proxy = account.get("proxy")
+            browser = p.chromium.launch(headless=True, proxy={"server": proxy} if proxy else None, args=launch_args)
             result = refresh_account(browser, account)
+            browser.close()
             results.append(result)
             if i < len(accounts) - 1:
                 time.sleep(5)
