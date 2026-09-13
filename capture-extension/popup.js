@@ -44,7 +44,10 @@ async function api(server, key, method, path, body) {
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) {
-        throw new Error(data?.error?.message || `HTTP ${resp.status}`);
+        const detail = typeof data?.detail === 'string'
+            ? data.detail
+            : data?.detail?.error?.message || data?.error?.message;
+        throw new Error(detail || `HTTP ${resp.status}`);
     }
     return data;
 }
