@@ -513,7 +513,9 @@ def refresh_all():
             pending_now = load_relogin_requests()
             pending_relogins.update(pending_now)
             remaining = [a for a in accounts if a.get("id") not in processed_ids]
-            requested_accounts = [a for a in remaining if a.get("id") in pending_now]
+            # 队列请求可能在目标账号本轮已经处理后才到达；此时仍要允许该账号
+            # 在当前循环中再插队一次，而不是让用户等到下一个 5 分钟周期。
+            requested_accounts = [a for a in accounts if a.get("id") in pending_now]
             account = (requested_accounts or remaining)[0]
             account_id = account.get("id")
             processed_ids.add(account_id)
