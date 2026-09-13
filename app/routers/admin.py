@@ -39,6 +39,8 @@ class AddAccountRequest(BaseModel):
     psid: Optional[str] = None
     psidts: str = ""
     label: str = ""
+    # Google 多账号选择器：同一 Profile 中通常为 0、1、2...
+    authuser: Optional[str] = None
     # 直接粘贴整段 Cookie 字符串（如从浏览器 F12 复制的完整 Cookie 头），
     # 服务端自动解析 __Secure-1PSID / __Secure-1PSIDTS，与 psid/psidts 字段二选一
     cookie: Optional[str] = None
@@ -214,6 +216,7 @@ async def add_account(req: AddAccountRequest):
             psid=psid,
             psidts=psidts,
             label=req.label,
+            authuser=req.authuser,
         )
         if created and not (req.label or "").strip():
             # 新号且标签留空：后台自动抓 Google 账号邮箱命名，不阻塞上号响应
@@ -279,6 +282,7 @@ class PreviewAccountRequest(BaseModel):
     cookie: Optional[str] = None
     psid: Optional[str] = None
     psidts: str = ""
+    authuser: Optional[str] = None
     no_wipe: bool = False  # 纯查询（如插件 whoami）时不清毒罐，避免误伤持久化状态
 
 
@@ -291,10 +295,11 @@ async def preview_account(req: PreviewAccountRequest):
             status_code=400,
             content={"error": {"message": "psid is required: provide psid or a cookie string containing __Secure-1PSID", "type": "invalid_request"}},
         )
-    duplicate = next((a for a in account_pool.accounts if a.psid == psid), None)
+    authuser = None if req.authuser is None or str(req.authuser).strip() == "" else str(req.authuser).strip()
+    duplicate = next((a for a in account_pool.accounts if a.psid == psid and a.authuser == authuser), None)
     from app.core.gemini_client import GeminiWebClient
 
-    client = GeminiWebClient(psid=psid, psidts=psidts)
+    client = GeminiWebClient(psid=psid, psidts=psidts, authuser=authuser)
     # 预览要回答的是「这段（新提交的）Cookie 是谁/活没活」，必须先清掉磁盘上
     # 同 PSID 的陈旧 Cookie 罐，否则「磁盘优先」会拿旧 cookie 判新 cookie 的死刑。
     # no_wipe（纯查询场景）跳过清罐，避免误伤号池持久化状态。
@@ -316,8 +321,9 @@ async def preview_account(req: PreviewAccountRequest):
         "valid": valid,
         "email": email,
         "psid_suffix": psid[-12:],
+        "authuser": authuser,
         "duplicate_of": duplicate.id if duplicate else None,
-        "in_pool_count": sum(1 for a in account_pool.accounts if a.psid == psid),
+        "in_pool_count": sum(1 for a in account_pool.accounts if a.psid == psid and a.authuser == authuser),
     }
 
 

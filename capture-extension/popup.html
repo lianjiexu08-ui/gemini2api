@@ -38,10 +38,8 @@
   <button id="confirm" class="success hidden">确认上号</button>
   <div id="status" class="hidden"></div>
 
-  <div class="tip"><b>多账号必读</b>：<code>__Secure-1PSID</code> 永远属于该浏览器 Profile 的<b>默认账号</b>
-  （第一个登录的号），网页右上角切头像不会改变它！<br>
-  推荐：每个车位用独立无痕窗口登录 → 保持窗口不关 → 插件里选「无痕窗口」捕获。<br>
-  长期方案：给每个车位建独立 Chrome Profile（独立 Cookie 罐，天然无串号）。</div>
+  <div class="tip"><b>同一 Profile 多账号</b>：先在 Gemini/Google 页面切换到目标账号，再点“捕获”。插件会读取当前页面的 <code>authuser</code>（如 0、1、2）并和共享 Cookie 一起保存；每个账号按“Cookie + authuser”去重。<br>
+  如果页面没有账号选择器参数，请打开目标 Gemini 页面（而不是设置页）后重试；无痕窗口仍可在上方选择独立 Cookie 来源。</div>
 
   <script src="popup.js"></script>
 </body>

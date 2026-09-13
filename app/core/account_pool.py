@@ -97,6 +97,8 @@ class Account:
     psid: str
     psidts: str
     label: str = ""
+    # Google authuser selector for multi-login profiles ("0", "1", ...).
+    authuser: str | None = None
     status: AccountStatus = AccountStatus.ACTIVE
     request_count: int = 0
     error_count: int = 0
@@ -192,6 +194,7 @@ class AccountPool:
                     id=item.get("id", f"account-{i}"),
                     psid=psid.strip().strip('"').strip("'").rstrip(";"),
                     psidts=(item.get("psidts") or "").strip().strip('"').strip("'").rstrip(";"),
+                    authuser=(str(item.get("authuser")).strip() if item.get("authuser") is not None and str(item.get("authuser")).strip() else None),
                     label=item.get("label", f"account-{i}"),
                 )
             except Exception as e:
@@ -221,7 +224,7 @@ class AccountPool:
         self._accounts.append(account)
 
     async def _init_account_client(self, account: Account):
-        client = GeminiWebClient(psid=account.psid, psidts=account.psidts)
+        client = GeminiWebClient(psid=account.psid, psidts=account.psidts, authuser=account.authuser)
         await client.initialize()
         account.client = client
         if client.is_healthy:
@@ -575,15 +578,16 @@ class AccountPool:
         return available[0]
 
     async def add_account(
-        self, psid: str, psidts: str, label: str = ""
+        self, psid: str, psidts: str, label: str = "", authuser: str | int | None = None
     ) -> tuple[Account, bool]:
         """上号。同 PSID 已存在时转为「续命」：更新凭据 + 清毒罐 + 热重载 client，
         返回 (账号, False)；新号正常入池返回 (账号, True)。
         幂等重上避免了旧实现重复入池（同号两条、配额浪费、风控翻倍）。"""
         norm_psid = psid.strip().strip('"').strip("'").rstrip(";")
         norm_psidts = psidts.strip().strip('"').strip("'").rstrip(";")
+        norm_authuser = None if authuser is None or str(authuser).strip() == "" else str(authuser).strip()
         for a in self._accounts:
-            if a.psid == norm_psid:
+            if a.psid == norm_psid and a.authuser == norm_authuser:
                 a.psidts = norm_psidts or a.psidts
                 if label and label != a.label:
                     a.label = label
@@ -601,6 +605,7 @@ class AccountPool:
             id=account_id,
             psid=norm_psid,
             psidts=norm_psidts,
+            authuser=norm_authuser,
             label=label or account_id,
         )
         await self._init_account_client(account)
@@ -778,6 +783,7 @@ class AccountPool:
                 "id": a.id,
                 "label": a.label,
                 "psid": a.psid,
+                "authuser": a.authuser,
                 "status": a.status.value,
                 "request_count": a.request_count,
                 "error_count": a.error_count,
@@ -970,6 +976,7 @@ class AccountPool:
                 "id": a.id,
                 "psid": a.psid,
                 "psidts": a.psidts,
+                "authuser": a.authuser,
                 "label": a.label,
             })
         path = Path(settings.accounts_file)

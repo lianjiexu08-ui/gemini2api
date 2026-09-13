@@ -1,5 +1,6 @@
 const $ = (id) => document.getElementById(id);
 let pendingCookie = null;
+let pendingAuthuser = null;
 
 function showStatus(text, cls) {
     const el = $('status');
@@ -12,17 +13,24 @@ async function getCfg() {
     return chrome.storage.local.get(['server', 'adminKey']);
 }
 
-async function getPageEmail() {
+async function getPageContext() {
     try {
         const tabs = await chrome.tabs.query({active: true, lastFocusedWindow: true});
         const tab = tabs[0];
-        if (!tab?.id || !/^https:\/\/(www\.)?(google\.com|google\.[^/]+)\//.test(tab.url || '')) return '';
+        if (!tab?.id || !/^https:\/\/(?:[\w-]+\.)*google\.[^/]+\//.test(tab.url || '')) return {email: '', authuser: null};
+        const u = new URL(tab.url);
+        // Gemini/Google expose the selected multi-login account as authuser or /u/N.
+        const authuser = u.searchParams.get('authuser') || (u.pathname.match(/\/u\/(\d+)(?:\/|$)/) || [])[1] || null;
         const [{result}] = await chrome.scripting.executeScript({target: {tabId: tab.id}, func: () => {
             const text = document.body?.innerText || '';
             return (text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig) || [])[0] || '';
         }});
-        return result || '';
-    } catch (_) { return ''; }
+        return {email: result || '', authuser};
+    } catch (_) { return {email: '', authuser: null}; }
+}
+
+async function getPageEmail() {
+    return (await getPageContext()).email;
 }
 
 async function api(server, key, method, path, body) {
@@ -75,8 +83,10 @@ async function whoami() {
             el.textContent = '⚠ 该窗口没有 Google 登录态';
             return;
         }
+        const page = await getPageContext();
         const r = await api(server, adminKey, 'POST', '/admin/accounts/preview', {
             cookie: `__Secure-1PSID=${psid}; __Secure-1PSIDTS=${pick('__Secure-1PSIDTS')}`,
+            authuser: page.authuser,
             no_wipe: true,
         });
         if (!r.valid) {
@@ -114,6 +124,7 @@ $('save').addEventListener('click', async () => {
 
 $('capture').addEventListener('click', async () => {
     pendingCookie = null;
+    pendingAuthuser = null;
     $('confirm').classList.add('hidden');
     try {
         const cookies = await chrome.cookies.getAll({ domain: '.google.com', storeId: $('store')?.value || undefined });
@@ -129,19 +140,21 @@ $('capture').addEventListener('click', async () => {
             return;
         }
         pendingCookie = `__Secure-1PSID=${byName['__Secure-1PSID']}; __Secure-1PSIDTS=${byName['__Secure-1PSIDTS'] || ''}`;
+        const page = await getPageContext();
+        pendingAuthuser = page.authuser;
         showStatus('识别中...');
 
         const { server, adminKey } = await getCfg();
-        const preview = await api(server, adminKey, 'POST', '/admin/accounts/preview', { cookie: pendingCookie });
+        const preview = await api(server, adminKey, 'POST', '/admin/accounts/preview', { cookie: pendingCookie, authuser: page.authuser });
         if (!preview.valid) {
             showStatus('✗ 该会话 Cookie 无效或已过期（可能需要重新登录 Gemini）', 'err');
             pendingCookie = null;
             return;
         }
         const who = preview.email || `psid…${preview.psid_suffix}`;
-        const pageEmail = await getPageEmail();
+        const pageEmail = page.email;
         if (pageEmail && preview.email && pageEmail.toLowerCase() !== preview.email.toLowerCase()) {
-            showStatus(`✗ 账号不一致：当前页面是 ${pageEmail}，Cookie 属于 ${preview.email}。已阻止上号，请使用该账号独立 Profile。`, 'err');
+            showStatus(`✗ 账号不一致：当前页面是 ${pageEmail}，会话(${preview.authuser ?? "默认"})属于 ${preview.email}。请在 Gemini 页面切换后重试。`, 'err');
             pendingCookie = null;
             return;
         }
@@ -162,13 +175,14 @@ $('confirm').addEventListener('click', async () => {
     $('confirm').disabled = true;
     try {
         const { server, adminKey } = await getCfg();
-        const r = await api(server, adminKey, 'POST', '/admin/accounts', { cookie: pendingCookie });
+        const r = await api(server, adminKey, 'POST', '/admin/accounts', { cookie: pendingCookie, authuser: pendingAuthuser });
         if (r.created === false) {
             showStatus(`⚠ 该账号已存在：${r.account.id}，已更新凭据，未重复添加`, 'warn');
         } else {
             showStatus(`✓ 已上号：${r.account.id}（标签自动获取中，稍后可见邮箱）`);
         }
         pendingCookie = null;
+        pendingAuthuser = null;
         $('confirm').classList.add('hidden');
     } catch (e) {
         showStatus(`✗ 上号失败：${e.message}`, 'err');

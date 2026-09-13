@@ -7,6 +7,7 @@ import asyncio
 import hashlib
 import logging
 from pathlib import Path
+from urllib.parse import quote
 from threading import Lock
 from collections import deque
 from datetime import datetime, timezone
@@ -434,9 +435,13 @@ def _rand_reqid() -> int:
 
 
 class GeminiWebClient:
-    def __init__(self, psid: str | None = None, psidts: str | None = None):
+    def __init__(self, psid: str | None = None, psidts: str | None = None, authuser: str | int | None = None):
         self._psid = psid or settings.gemini_psid
         self._psidts = psidts or settings.gemini_psidts
+        # Google multi-login selects the active account via authuser while sharing the
+        # profile PSID. Keep this selector with the credential so one Profile can host
+        # multiple Gemini accounts.
+        self._authuser = None if authuser is None or str(authuser).strip() == "" else str(authuser).strip()
         self._session_uuid: str = str(uuid.uuid4()).upper()
         self._session_token: str = ""
         self._push_id: str = ""
@@ -575,8 +580,15 @@ class GeminiWebClient:
     def _get_cookies(self) -> dict[str, str]:
         return self._cookie_jar.get_all()
 
+    def _account_url(self, url: str) -> str:
+        """Attach Google's multi-login selector to every page/RPC request."""
+        if self._authuser is None:
+            return url
+        sep = "&" if "?" in url else "?"
+        return f"{url}{sep}authuser={quote(self._authuser, safe='')}"
+
     def _get_headers(self, method: str = "GET", content_type: str | None = None) -> dict:
-        return dict(header_builder.build(url=GEMINI_APP_URL, method=method, content_type=content_type))
+        return dict(header_builder.build(url=self._account_url(GEMINI_APP_URL), method=method, content_type=content_type))
 
     async def check_account(self) -> dict:
         now = datetime.now(timezone.utc).isoformat()
@@ -585,7 +597,7 @@ class GeminiWebClient:
             self._clear_session_cookies()
             cookies = self._get_cookies()
             headers = self._get_headers("GET")
-            resp = await self._http.get(GEMINI_APP_EN_URL, cookies=cookies, headers=headers)
+            resp = await self._http.get(self._account_url(GEMINI_APP_EN_URL), cookies=cookies, headers=headers)
             self._cookie_jar.update_from_response(resp)
 
             if resp.status_code != 200:
@@ -662,19 +674,19 @@ class GeminiWebClient:
 
             await apply_jitter("navigation")
             self._clear_session_cookies()
-            resp = await self._http.get(GOOGLE_HOME_URL, cookies=cookies, headers=headers)
+            resp = await self._http.get(self._account_url(GOOGLE_HOME_URL), cookies=cookies, headers=headers)
             self._cookie_jar.update_from_response(resp)
 
             await apply_jitter("navigation")
             self._clear_session_cookies()
             cookies = self._get_cookies()
-            resp = await self._http.get(GEMINI_HOME_URL, cookies=cookies, headers=headers)
+            resp = await self._http.get(self._account_url(GEMINI_HOME_URL), cookies=cookies, headers=headers)
             self._cookie_jar.update_from_response(resp)
 
             await apply_jitter("navigation")
             self._clear_session_cookies()
             cookies = self._get_cookies()
-            resp = await self._http.get(GEMINI_APP_EN_URL, cookies=cookies, headers=headers)
+            resp = await self._http.get(self._account_url(GEMINI_APP_EN_URL), cookies=cookies, headers=headers)
             self._cookie_jar.update_from_response(resp)
 
             if resp.status_code != 200:
@@ -782,6 +794,8 @@ class GeminiWebClient:
                 "rt": "c",
                 "source-path": "/app",
             }
+            if self._authuser is not None:
+                params["authuser"] = self._authuser
 
             cookies = self._get_cookies()
             headers = self._get_headers("POST", content_type="application/x-www-form-urlencoded")
@@ -827,6 +841,8 @@ class GeminiWebClient:
                 "rt": "c",
                 "source-path": "/app",
             }
+            if self._authuser is not None:
+                params["authuser"] = self._authuser
             cookies = self._get_cookies()
             headers = self._get_headers("POST", content_type="application/x-www-form-urlencoded")
             headers.update({
@@ -1304,7 +1320,7 @@ class GeminiWebClient:
         session = AsyncSession(impersonate=self._current_target, timeout=180)
         try:
             async with session.stream(
-                "POST", GENERATE_URL,
+                "POST", self._account_url(GENERATE_URL),
                 data=form_data, cookies=cookies, headers=headers,
             ) as resp:
                 try:
@@ -1449,7 +1465,7 @@ class GeminiWebClient:
             else _GENERATE_TIMEOUT_DEFAULT
         )
         resp = await self._http.post(
-            GENERATE_URL, data=form_data, cookies=cookies, headers=headers,
+            self._account_url(GENERATE_URL), data=form_data, cookies=cookies, headers=headers,
             timeout=gen_timeout,
         )
         self._cookie_jar.update_from_response(resp)
