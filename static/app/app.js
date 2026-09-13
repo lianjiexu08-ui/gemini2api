@@ -447,6 +447,33 @@ async function importProxies() {
     catch (e) { showToast(`导入代理失败: ${e.message}`, 'error'); }
 }
 
+const _reloginPollers = new Map();
+function renderReloginStatus(status) {
+    const el = document.querySelector(`[data-relogin-log="${CSS.escape(status.account_id)}"]`);
+    if (!el) return;
+    el.hidden = false;
+    const terminal = status.status === 'completed' || status.status === 'failed';
+    el.className = `relogin-log ${terminal ? status.status : 'processing'}`;
+    const logs = (status.logs || []).map(item => `<div><time>${escapeHtml(item.time || '')}</time> ${escapeHtml(item.message || '')}</div>`).join('');
+    el.innerHTML = `<strong>${escapeHtml(status.message || status.status || '重登中')}</strong><div class="relogin-log-lines">${logs}</div>`;
+}
+function pollReloginStatus(accountId) {
+    if (_reloginPollers.has(accountId)) clearTimeout(_reloginPollers.get(accountId));
+    const poll = async () => {
+        try {
+            const status = await apiCall('GET', `/admin/accounts/${encodeURIComponent(accountId)}/relogin/status`);
+            renderReloginStatus(status);
+            if (status.status === 'completed' || status.status === 'failed') {
+                _reloginPollers.delete(accountId);
+                if (status.status === 'completed') setTimeout(() => loadAccounts(), 800);
+                return;
+            }
+        } catch (e) { /* 保持当前日志，下一轮重试 */ }
+        _reloginPollers.set(accountId, setTimeout(poll, 2000));
+    };
+    poll();
+}
+
 async function loadAccounts() {
     try {
         const data = await apiCall('GET', '/admin/accounts');
@@ -511,6 +538,7 @@ async function loadAccounts() {
                     <span class="label">${t('accounts.lastError')}</span>
                     <span class="value text-muted">${_accountLastErrorText(account)}</span>
                 </div>` : ''}
+                <div class="relogin-log" data-relogin-log="${idEsc}" hidden></div>
                 <div class="account-actions">
                     <button class="btn btn-sm btn-outline acc-check-btn" data-account-id="${idEsc}">
                         <i class="fas fa-heartbeat"></i> ${t('accounts.check')}
@@ -548,9 +576,8 @@ async function loadAccounts() {
                 btn.disabled = true;
                 apiCall('POST', `/admin/accounts/${accountId}/relogin`)
                     .then(() => {
-                        showToast('已触发服务器自动重登，正在获取新会话 Cookie', 'success');
-                        // 刷新器完成后自动更新卡片状态；不打开浏览器，也不需要手动捕获。
-                        setTimeout(() => loadAccounts(), 12000);
+                        showToast('服务器已开始自动重登，详情显示在账号卡片下方', 'success');
+                        pollReloginStatus(accountId);
                     })
                     .catch(() => showToast('服务器自动重登不可用，请检查 Playwright 刷新器', 'warning'))
                     .finally(() => { btn.disabled = false; });

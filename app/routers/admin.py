@@ -434,6 +434,26 @@ async def test_account_generation(account_id: str, req: TestAccountRequest):
     return result
 
 
+def _relogin_status_path(account_id: str):
+    from pathlib import Path
+    return Path("data/relogin_status") / f"{account_id}.json"
+
+
+def _write_relogin_status(account_id: str, status: str, message: str):
+    path = _relogin_status_path(account_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {"account_id": account_id, "status": status, "message": message, "updated_at": time.time(), "logs": []}
+    try:
+        if path.exists():
+            old = json.loads(path.read_text())
+            payload["logs"] = old.get("logs", [])[-19:]
+    except Exception:
+        pass
+    payload["logs"].append({"time": time.strftime("%H:%M:%S"), "message": message})
+    path.write_text(json.dumps(payload, ensure_ascii=False))
+    return payload
+
+
 @router.post("/accounts/{account_id}/relogin")
 async def request_account_relogin(account_id: str):
     """Queue a server-side Playwright relogin for the refresher container."""
@@ -442,8 +462,22 @@ async def request_account_relogin(account_id: str):
     from pathlib import Path
     task_dir = Path("data/relogin_requests")
     task_dir.mkdir(parents=True, exist_ok=True)
+    _write_relogin_status(account_id, "queued", "已加入重登队列，等待 Playwright 自动处理")
     (task_dir / f"{account_id}.json").write_text(json.dumps({"account_id": account_id, "requested_at": time.time()}))
     return {"status": "queued", "message": "server Playwright relogin queued"}
+
+
+@router.get("/accounts/{account_id}/relogin/status")
+async def get_account_relogin_status(account_id: str):
+    if not any(a.id == account_id for a in account_pool.accounts):
+        return JSONResponse(status_code=404, content={"error": {"message": "account not found", "type": "not_found"}})
+    path = _relogin_status_path(account_id)
+    if not path.exists():
+        return {"account_id": account_id, "status": "idle", "message": "暂无重登任务", "logs": []}
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return {"account_id": account_id, "status": "unknown", "message": "状态日志暂不可读", "logs": []}
 
 
 @router.put("/accounts/{account_id}/credentials")

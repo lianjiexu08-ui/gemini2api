@@ -127,6 +127,22 @@ def load_accounts():
     return []
 
 
+def write_relogin_status(account_id, status, message):
+    """写共享状态日志，供管理面板实时展示。"""
+    path = os.path.join(DATA_DIR, "relogin_status", f"{account_id}.json")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    payload = {"account_id": account_id, "status": status, "message": message, "updated_at": time.time(), "logs": []}
+    try:
+        with open(path, "r") as f:
+            old = json.load(f)
+        payload["logs"] = old.get("logs", [])[-19:]
+    except Exception:
+        pass
+    payload["logs"].append({"time": time.strftime("%H:%M:%S"), "message": message})
+    with open(path, "w") as f:
+        json.dump(payload, f, ensure_ascii=False)
+
+
 def load_relogin_requests():
     """读取面板发出的重登请求，返回 account_id -> request file 映射。
 
@@ -351,6 +367,9 @@ def refresh_all():
 
         for i, account in enumerate(accounts):
             account_id = account.get("id")
+            requested = account_id in pending_relogins
+            if requested:
+                write_relogin_status(account_id, "processing", "正在启动 Playwright 浏览器")
             # credentials are fetched only for this run and never written to refresher output
             try:
                 h = {"Authorization": f"Bearer {ADMIN_KEY}"} if ADMIN_KEY else {}
@@ -359,12 +378,20 @@ def refresh_all():
             except Exception as exc:
                 print(f"  [{account_id}] credential fetch skipped: {exc}")
             proxy = normalize_proxy(account.get("proxy"))
+            if requested:
+                write_relogin_status(account_id, "processing", "凭据已读取，正在通过账号代理打开登录页")
             browser = None
             try:
                 browser = p.chromium.launch(headless=True, proxy=playwright_proxy(proxy), args=launch_args)
+                if requested:
+                    write_relogin_status(account_id, "processing", "浏览器已启动，正在登录并获取 Cookie")
                 result = refresh_account(browser, account)
+                if requested and result.get("status") == "active":
+                    write_relogin_status(account_id, "cookies_found", "已获取新 Cookie，正在回写账号池")
             except Exception as exc:
                 print(f"  [{account_id}] ERROR - browser refresh failed: {exc}")
+                if requested:
+                    write_relogin_status(account_id, "failed", f"浏览器重登失败：{str(exc)[:180]}")
                 result = {"id": account_id, "label": account.get("label", account_id), "status": "error", "error": str(exc), "updated_at": time.time()}
             finally:
                 if browser is not None:
@@ -381,7 +408,12 @@ def refresh_all():
 
     active = [r for r in results if r.get("status") == "active"]
     for acc in active:
-        notify_gemini2api(acc["id"], acc["psid"], acc["psidts"])
+        synced = notify_gemini2api(acc["id"], acc["psid"], acc["psidts"])
+        if acc["id"] in pending_relogins:
+            write_relogin_status(acc["id"], "completed" if synced else "failed", "新 Cookie 已自动写回账号池" if synced else "Cookie 已获取，但回写账号池失败")
+    for result in results:
+        if result.get("id") in pending_relogins and result.get("status") != "active":
+            write_relogin_status(result["id"], "failed", "未获取到有效 Cookie，可能需要检查账号凭据或 Google 验证")
 
     print(f"\n  Summary: {len(active)}/{len(results)} accounts active")
 
