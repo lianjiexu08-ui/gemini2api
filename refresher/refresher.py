@@ -250,7 +250,13 @@ def refresh_account(browser, account):
     page = context.new_page()
 
     try:
-        page.goto("https://gemini.google.com/app", timeout=90000, wait_until="domcontentloaded")
+        # 同一 Google Profile 的多账号共享 __Secure-1PSID，必须通过
+        # authuser 选择器指定目标账号，否则 Playwright 总会落到默认账号。
+        authuser = account.get("authuser")
+        login_url = "https://gemini.google.com/app"
+        if authuser is not None and str(authuser).strip() not in ("", "0"):
+            login_url += f"?authuser={quote(str(authuser).strip(), safe='')}"
+        page.goto(login_url, timeout=90000, wait_until="domcontentloaded")
         time.sleep(15)
 
         # Cookie 失效时，尝试使用服务器加密凭据完成登录；Google 风控/手机确认仍会停在页面。
@@ -300,7 +306,7 @@ def notify_gemini2api(account_id, psid, psidts):
         )
         if resp.status_code == 200:
             print(f"  [notify] {account_id} cookies updated via PUT")
-            return True
+            return True, ""
         elif resp.status_code == 404:
             # 账号不存在，fallback 到全局 reload
             resp2 = http_requests.post(
@@ -311,22 +317,26 @@ def notify_gemini2api(account_id, psid, psidts):
             )
             if resp2.status_code == 200:
                 print(f"  [notify] cookies reloaded via POST (account not in pool)")
-                return True
+                return True, ""
             elif resp2.status_code == 401:
                 print(f"  [notify] auth rejected (401) — set ADMIN_API_KEY/API_KEY to match the server's admin key")
-                return False
+                return False, "管理密钥不匹配（401）"
             else:
                 print(f"  [notify] reload failed: {resp2.status_code} {resp2.text[:100]}")
-                return False
+                return False, f"服务器回写接口返回 HTTP {resp2.status_code}: {resp2.text[:120]}"
         elif resp.status_code == 401:
             print(f"  [notify] auth rejected (401) — set ADMIN_API_KEY/API_KEY to match the server's admin key")
-            return False
+            return False, "管理密钥不匹配（401）"
         else:
-            print(f"  [notify] PUT failed: {resp.status_code} {resp.text[:100]}")
-            return False
+            print(f"  [notify] PUT failed: {resp.status_code} {resp.text[:180]}")
+            try:
+                detail = resp.json().get("error", {}).get("message", "")
+            except Exception:
+                detail = ""
+            return False, f"服务器拒绝 Cookie（HTTP {resp.status_code}）" + (f"：{detail}" if detail else "")
     except Exception as e:
         print(f"  [notify] Failed to reach gemini2api: {e}")
-        return False
+        return False, f"无法连接主服务：{str(e)[:120]}"
 
 
 def refresh_all():
@@ -408,9 +418,13 @@ def refresh_all():
 
     active = [r for r in results if r.get("status") == "active"]
     for acc in active:
-        synced = notify_gemini2api(acc["id"], acc["psid"], acc["psidts"])
+        synced, notify_error = notify_gemini2api(acc["id"], acc["psid"], acc["psidts"])
         if acc["id"] in pending_relogins:
-            write_relogin_status(acc["id"], "completed" if synced else "failed", "新 Cookie 已自动写回账号池" if synced else "Cookie 已获取，但回写账号池失败")
+            write_relogin_status(
+                acc["id"],
+                "completed" if synced else "failed",
+                "新 Cookie 已自动写回账号池" if synced else f"Cookie 已获取，但回写账号池失败：{notify_error}",
+            )
     for result in results:
         if result.get("id") in pending_relogins and result.get("status") != "active":
             write_relogin_status(result["id"], "failed", "未获取到有效 Cookie，可能需要检查账号凭据或 Google 验证")
