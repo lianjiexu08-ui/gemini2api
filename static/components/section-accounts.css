@@ -340,6 +340,9 @@
 .proxy-row-actions { display:flex; gap:.45rem; flex:0 0 auto; }
 @media (max-width:640px) { .proxy-row-actions { width:100%; } .proxy-row-actions .btn { flex:1; } }
 .relogin-log { margin: .7rem 0 .25rem; padding: .65rem .75rem; border-radius: var(--radius-md); background: var(--bg-secondary); border: 1px solid var(--border-color); font-size: .8rem; line-height: 1.45; }
+.relogin-log-head { display:flex; align-items:center; justify-content:space-between; gap:.6rem; }
+.relogin-log-head strong { min-width:0; overflow-wrap:anywhere; }
+.relogin-copy-btn { flex:0 0 auto; padding:.2rem .5rem; font-size:.72rem; }
 .relogin-log.processing { border-color: var(--primary-color); }
 .relogin-log.completed { border-color: #20b486; }
 .relogin-log.failed { border-color: var(--danger-color, #e74c3c); }

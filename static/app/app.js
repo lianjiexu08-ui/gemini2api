@@ -485,11 +485,32 @@ function handleManualReloginRequired(status, options = {}) {
 function renderReloginStatus(status) {
     const el = document.querySelector(`[data-relogin-log="${CSS.escape(status.account_id)}"]`);
     if (!el) return;
+    const oldLines = el.querySelector('.relogin-log-lines');
+    const oldScrollTop = oldLines?.scrollTop || 0;
+    const wasAtBottom = oldLines
+        ? oldLines.scrollHeight - oldLines.scrollTop - oldLines.clientHeight < 8
+        : true;
     el.hidden = false;
     const terminal = ['completed', 'failed', 'manual_required'].includes(status.status);
     el.className = `relogin-log ${terminal ? status.status : 'processing'}`;
+    const logText = (status.logs || []).map(item => `${item.time || ''} ${item.message || ''}`).join('\n');
     const logs = (status.logs || []).map(item => `<div><time>${escapeHtml(item.time || '')}</time> ${escapeHtml(item.message || '')}</div>`).join('');
-    el.innerHTML = `<strong>${escapeHtml(status.message || status.status || '重登中')}</strong><div class="relogin-log-lines">${logs}</div>`;
+    el.innerHTML = `<div class="relogin-log-head"><strong>${escapeHtml(status.message || status.status || '重登中')}</strong><button type="button" class="btn btn-xs btn-outline relogin-copy-btn">复制日志</button></div><div class="relogin-log-lines">${logs}</div>`;
+    const newLines = el.querySelector('.relogin-log-lines');
+    if (newLines) {
+        requestAnimationFrame(() => {
+            newLines.scrollTop = wasAtBottom ? newLines.scrollHeight : oldScrollTop;
+        });
+    }
+    el.querySelector('.relogin-copy-btn')?.addEventListener('click', async () => {
+        const text = [status.message || status.status || '重登中', logText].filter(Boolean).join('\n');
+        try {
+            await navigator.clipboard.writeText(text);
+            showToast('重登日志已复制', 'success');
+        } catch (e) {
+            showToast('复制失败，请检查浏览器剪贴板权限', 'warning');
+        }
+    });
 }
 function pollReloginStatus(accountId, options = {}) {
     if (_reloginPollers.has(accountId)) clearTimeout(_reloginPollers.get(accountId));
