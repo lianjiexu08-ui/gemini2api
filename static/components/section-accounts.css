@@ -336,3 +336,6 @@
 .proxy-item code { min-width:0; overflow-wrap:anywhere; }
 .proxy-assigned { color:var(--text-secondary); font-size:.82rem; white-space:nowrap; }
 @media (max-width:640px) { .proxy-item { align-items:flex-start; flex-direction:column; } .proxy-assigned { white-space:normal; } }
+.proxy-manager-actions { display:flex; flex-wrap:wrap; gap:.6rem; margin-top:.75rem; }
+.proxy-row-actions { display:flex; gap:.45rem; flex:0 0 auto; }
+@media (max-width:640px) { .proxy-row-actions { width:100%; } .proxy-row-actions .btn { flex:1; } }

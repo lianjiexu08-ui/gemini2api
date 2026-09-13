@@ -238,6 +238,41 @@ async def delete_proxy(proxy_id: str):
     return JSONResponse(status_code=404, content={"error": {"message": "Proxy not found", "type": "not_found"}})
 
 
+def _proxy_test_target(proxy: str) -> dict:
+    """Return a safe, stable connectivity target; no account cookies are sent."""
+    import time as _time
+    started = _time.perf_counter()
+    try:
+        from curl_cffi import requests as curl_requests
+        response = curl_requests.get(
+            "https://www.google.com/generate_204",
+            proxy=normalize_proxy(proxy),
+            timeout=12,
+            impersonate="chrome",
+        )
+        return {"ok": 200 <= response.status_code < 400, "status_code": response.status_code, "latency_ms": round((_time.perf_counter() - started) * 1000)}
+    except Exception as exc:
+        return {"ok": False, "latency_ms": round((_time.perf_counter() - started) * 1000), "error": str(exc)[:240]}
+
+
+@router.post("/proxies/{proxy_id}/test")
+async def test_proxy(proxy_id: str):
+    item = next((p for p in proxy_store.list() if p.get("id") == proxy_id), None)
+    if not item:
+        return JSONResponse(status_code=404, content={"error": {"message": "Proxy not found", "type": "not_found"}})
+    result = await asyncio.to_thread(_proxy_test_target, item["proxy"])
+    return {"id": proxy_id, "proxy": item["proxy"], **result}
+
+
+@router.post("/proxies/test-all")
+async def test_all_proxies():
+    results = []
+    for item in proxy_store.list():
+        result = await asyncio.to_thread(_proxy_test_target, item["proxy"])
+        results.append({"id": item.get("id"), "proxy": item.get("proxy"), **result})
+    return {"total": len(results), "ok": sum(1 for r in results if r.get("ok")), "failed": sum(1 for r in results if not r.get("ok")), "results": results}
+
+
 @router.post("/accounts")
 async def add_account(req: AddAccountRequest):
     psid, psidts = _resolve_credentials(req.psid, req.psidts, req.cookie)

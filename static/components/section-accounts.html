@@ -1,4 +1,4 @@
-<link rel="stylesheet" href="components/section-accounts.css?v=5">
+<link rel="stylesheet" href="components/section-accounts.css?v=6">
 <!-- Accounts Section -->
 <section id="accounts" class="section" aria-labelledby="accounts-title">
     <div class="section-header">
@@ -207,7 +207,7 @@
     <div class="modal-body">
       <p class="text-muted">每行一个代理，支持 <code>host:port:username:password</code>、<code>http://user:pass@host:port</code> 和 SOCKS5。</p>
       <textarea id="proxy-import-text" class="form-control" rows="5" placeholder="104.253.59.240:6663:Youcantrus:Youcantrus"></textarea>
-      <button class="btn btn-primary" id="importProxiesBtn" style="margin-top:.75rem"><i class="fas fa-file-import"></i> 批量导入</button>
+      <div class="proxy-manager-actions"><button class="btn btn-primary" id="importProxiesBtn"><i class="fas fa-file-import"></i> 批量导入</button><button class="btn btn-outline" id="testAllProxiesBtn"><i class="fas fa-vials"></i> 全部测试</button></div>
       <div id="proxyList" class="proxy-list" style="margin-top:1rem"></div>
     </div>
     <div class="modal-footer"><button class="btn btn-secondary modal-cancel">关闭</button></div>

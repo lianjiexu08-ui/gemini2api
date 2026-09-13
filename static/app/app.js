@@ -411,8 +411,16 @@ function renderProxyList() {
     container.innerHTML = _managedProxies.map(item => {
         const assigned = (item.assigned_accounts || []).map(a => a.label || a.id).join('、');
         const detail = assigned ? `已配置 ${item.assigned_count} 个账号：${assigned}` : '尚未配置账号';
-        return `<div class="proxy-row"><div class="proxy-row-main"><div class="proxy-row-value">${escapeHtml(_proxyDisplay(item.proxy))}</div><div class="proxy-row-meta">${escapeHtml(detail)}</div></div><button class="btn btn-sm btn-danger proxy-delete-btn" data-proxy-id="${escapeAttr(item.id)}"><i class="fas fa-trash"></i> 删除</button></div>`;
+        return `<div class="proxy-row"><div class="proxy-row-main"><div class="proxy-row-value">${escapeHtml(_proxyDisplay(item.proxy))}</div><div class="proxy-row-meta">${escapeHtml(detail)}</div></div><div class="proxy-row-actions"><button class="btn btn-sm btn-outline proxy-test-btn" data-proxy-id="${escapeAttr(item.id)}"><i class="fas fa-heartbeat"></i> 测试</button><button class="btn btn-sm btn-danger proxy-delete-btn" data-proxy-id="${escapeAttr(item.id)}"><i class="fas fa-trash"></i> 删除</button></div></div>`;
     }).join('');
+    container.querySelectorAll('.proxy-test-btn').forEach(btn => btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        try {
+            const result = await apiCall('POST', `/admin/proxies/${encodeURIComponent(btn.dataset.proxyId)}/test`);
+            showToast(result.ok ? `代理可用 · ${result.latency_ms} ms` : `代理不可用：${result.error || `HTTP ${result.status_code || '-'}`}`, result.ok ? 'success' : 'error');
+        } catch (e) { showToast(`代理测试失败: ${e.message}`, 'error'); }
+        finally { btn.disabled = false; }
+    }));
     container.querySelectorAll('.proxy-delete-btn').forEach(btn => btn.addEventListener('click', async () => {
         try { await apiCall('DELETE', `/admin/proxies/${encodeURIComponent(btn.dataset.proxyId)}`); showToast('代理已从管理池删除（不会清除已绑定账号）', 'success'); await loadManagedProxies(); }
         catch (e) { showToast(`删除代理失败: ${e.message}`, 'error'); }
@@ -420,6 +428,17 @@ function renderProxyList() {
 }
 function openProxyManagerModal() { document.getElementById('proxyManagerModal')?.classList.add('active'); loadManagedProxies(); }
 function closeProxyManagerModal() { document.getElementById('proxyManagerModal')?.classList.remove('active'); }
+async function testAllProxies() {
+    const btn = document.getElementById('testAllProxiesBtn');
+    if (btn) btn.disabled = true;
+    try {
+        const result = await apiCall('POST', '/admin/proxies/test-all');
+        showToast(`代理测试完成：${result.ok || 0} 可用，${result.failed || 0} 不可用`, result.failed ? 'warning' : 'success');
+        await loadManagedProxies();
+    } catch (e) { showToast(`全部测试失败: ${e.message}`, 'error'); }
+    finally { if (btn) btn.disabled = false; }
+}
+
 async function importProxies() {
     const input = document.getElementById('proxy-import-text');
     const text = input?.value.trim() || '';
@@ -1542,6 +1561,8 @@ function initEventListeners() {
         proxyManagerModal.addEventListener('click', e => { if (e.target === proxyManagerModal) closeProxyManagerModal(); });
         const importBtn = document.getElementById('importProxiesBtn');
         if (importBtn) importBtn.addEventListener('click', importProxies);
+        const testAllBtn = document.getElementById('testAllProxiesBtn');
+        if (testAllBtn) testAllBtn.addEventListener('click', testAllProxies);
     }
     document.querySelectorAll('.proxy-select').forEach(select => select.addEventListener('change', () => {
         const manual = select.id === 'add-proxy-select' ? document.getElementById('add-proxy') : document.getElementById('update-proxy');
