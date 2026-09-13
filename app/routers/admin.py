@@ -279,6 +279,7 @@ class PreviewAccountRequest(BaseModel):
     cookie: Optional[str] = None
     psid: Optional[str] = None
     psidts: str = ""
+    no_wipe: bool = False  # 纯查询（如插件 whoami）时不清毒罐，避免误伤持久化状态
 
 
 @router.post("/accounts/preview")
@@ -296,7 +297,9 @@ async def preview_account(req: PreviewAccountRequest):
     client = GeminiWebClient(psid=psid, psidts=psidts)
     # 预览要回答的是「这段（新提交的）Cookie 是谁/活没活」，必须先清掉磁盘上
     # 同 PSID 的陈旧 Cookie 罐，否则「磁盘优先」会拿旧 cookie 判新 cookie 的死刑。
-    client.wipe_cookie_jar()
+    # no_wipe（纯查询场景）跳过清罐，避免误伤号池持久化状态。
+    if not req.no_wipe:
+        client.wipe_cookie_jar()
     try:
         await asyncio.wait_for(client.initialize(), timeout=30)
         valid = bool(getattr(client, "_session_token", ""))

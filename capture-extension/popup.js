@@ -47,15 +47,51 @@ async function loadStores() {
     }
 }
 
+// 打开 popup 即显示「当前 Cookie 属于谁」，换号前先看这里
+async function whoami() {
+    const el = $('whoami');
+    if (!el) return;
+    const { server, adminKey } = await getCfg();
+    if (!server || !adminKey) return;
+    el.textContent = '正在识别当前默认账号…';
+    try {
+        const cookies = await chrome.cookies.getAll({ domain: '.google.com', storeId: $('store')?.value || undefined });
+        const pick = (n) => (cookies.find(c => c.name === n && c.domain === '.google.com') || cookies.find(c => c.name === n))?.value || '';
+        const psid = pick('__Secure-1PSID');
+        if (!psid) {
+            el.textContent = '⚠ 该窗口没有 Google 登录态';
+            return;
+        }
+        const r = await api(server, adminKey, 'POST', '/admin/accounts/preview', {
+            cookie: `__Secure-1PSID=${psid}; __Secure-1PSIDTS=${pick('__Secure-1PSIDTS')}`,
+            no_wipe: true,
+        });
+        if (!r.valid) {
+            el.textContent = '⚠ 当前默认账号会话已失效（需重新登录）';
+        } else if (r.duplicate_of) {
+            el.textContent = `当前默认账号：${r.email}（已在池中：${r.duplicate_of}）`;
+        } else {
+            el.textContent = `当前默认账号：${r.email || '（未识别邮箱）'}`;
+        }
+    } catch (e) {
+        el.textContent = '';
+    }
+}
+
 function refreshUI() {
     getCfg().then(({ server, adminKey }) => {
         const ok = server && adminKey;
         $('config').classList.toggle('hidden', !!ok);
         $('capture').classList.toggle('hidden', !ok);
         if (server) $('server').value = server;
-        loadStores();
+        loadStores().then(whoami);
     });
 }
+
+// 切换 Cookie 来源窗口后重新识别
+document.addEventListener('DOMContentLoaded', () => {
+    $('store')?.addEventListener('change', whoami);
+});
 
 $('save').addEventListener('click', async () => {
     await chrome.storage.local.set({ server: $('server').value.trim(), adminKey: $('adminKey').value.trim() });
