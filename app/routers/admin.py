@@ -284,6 +284,8 @@ class CredentialsRequest(BaseModel):
     email: str
     password: str
     totp_secret: Optional[str] = None
+    totp_url: Optional[str] = None
+    totp_key: Optional[str] = None
     proxy: Optional[str] = None
 
 
@@ -364,7 +366,7 @@ async def update_account_credentials(account_id: str, req: CredentialsRequest):
         return JSONResponse(status_code=404, content={"error": {"message": f"Account {account_id} not found", "type": "not_found"}})
     from app.core import credential_vault
     try:
-        credential_vault.put(account_id, {"email": req.email.strip(), "password": req.password, "totp_secret": req.totp_secret, "proxy": req.proxy})
+        credential_vault.put(account_id, {"email": req.email.strip(), "password": req.password, "totp_secret": req.totp_secret, "totp_url": req.totp_url, "totp_key": req.totp_key, "proxy": req.proxy})
     except RuntimeError as exc:
         return JSONResponse(status_code=503, content={"error": {"message": str(exc), "type": "vault_not_configured"}})
     return {"status": "ok", "message": "credentials stored encrypted"}
@@ -378,6 +380,21 @@ async def delete_account_credentials(account_id: str):
     except RuntimeError as exc:
         return JSONResponse(status_code=503, content={"error": {"message": str(exc), "type": "vault_not_configured"}})
     return {"status": "ok"}
+
+
+@router.get("/accounts/{account_id}/credentials")
+async def get_account_credentials(account_id: str):
+    """Internal refresher endpoint; admin-authenticated and never included in account listings."""
+    if not any(a.id == account_id for a in account_pool.accounts):
+        return JSONResponse(status_code=404, content={"error": {"message": "account not found", "type": "not_found"}})
+    from app.core import credential_vault
+    try:
+        data = credential_vault.load_all().get(account_id)
+    except RuntimeError as exc:
+        return JSONResponse(status_code=503, content={"error": {"message": str(exc), "type": "vault_not_configured"}})
+    if not data:
+        return JSONResponse(status_code=404, content={"error": {"message": "credentials not configured", "type": "not_found"}})
+    return data
 
 
 @router.patch("/accounts/{account_id}")

@@ -849,6 +849,8 @@ async function submitUpdateCookie() {
     const email = document.getElementById('update-email')?.value.trim() || '';
     const password = document.getElementById('update-password')?.value || '';
     const totp_secret = document.getElementById('update-totp')?.value || '';
+    const totp_url = document.getElementById('update-totp-url')?.value.trim() || '';
+    const totp_key = document.getElementById('update-totp-key')?.value || '';
 
     if (!cookie && !psid) {
         showToast('请粘贴完整 Cookie 或填写 __Secure-1PSID', 'warning');
@@ -867,7 +869,7 @@ async function submitUpdateCookie() {
         if (proxy) payload.proxy = proxy;
         if (cookie || psid) await apiCall('PUT', `/admin/accounts/${updateCookieAccountId}/cookies`, payload);
         if (email && password) {
-            await apiCall('PUT', `/admin/accounts/${updateCookieAccountId}/credentials`, { email, password, totp_secret: totp_secret || null, proxy: proxy || null });
+            await apiCall('PUT', `/admin/accounts/${updateCookieAccountId}/credentials`, { email, password, totp_secret: totp_secret || null, totp_url: totp_url || null, totp_key: totp_key || null, proxy: proxy || null });
         }
         showToast('Cookie 更新成功', 'success');
         closeUpdateCookieModal();
