@@ -463,8 +463,10 @@ function openManualReloginWindow(accountId, authuser = '') {
 }
 
 function manualReloginUrl(authuser) {
-    const target = `https://gemini.google.com/app${authuser && authuser !== '0' ? `?authuser=${encodeURIComponent(authuser)}` : ''}`;
-    return `https://accounts.google.com/v3/signin/identifier?authuser=${encodeURIComponent(authuser || '0')}&continue=${encodeURIComponent(target)}`;
+    // 直接进入 Gemini 的账号路径，让 Google 自己生成当前有效的登录/验证跳转。
+    // 手工拼接 v3/signin/identifier 的 continue 参数会被 Google 判定为 malformed (400)。
+    const selector = authuser && authuser !== '0' ? `/u/${encodeURIComponent(authuser)}` : '';
+    return `https://gemini.google.com${selector}/app`;
 }
 
 function handleManualReloginRequired(status, options = {}) {
