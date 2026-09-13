@@ -442,18 +442,20 @@ def refresh_all():
                         "failed",
                         result.get("error") or "未获取到有效 Cookie，可能需要检查账号凭据或 Google 验证",
                     )
-                elif not result.get("cookie_changed"):
-                    write_relogin_status(
-                        account_id,
-                        "failed",
-                        "检测到的 Cookie 与旧值相同，未完成账号切换；请检查 authuser、账号凭据或 Google 验证",
-                    )
                 else:
                     synced, notify_error = notify_gemini2api(account_id, result["psid"], result["psidts"])
                     write_relogin_status(
                         account_id,
                         "completed" if synced else "failed",
-                        "新 Cookie 已自动写回账号池" if synced else f"Cookie 已获取，但回写账号池失败：{notify_error}",
+                        (
+                            "新 Cookie 已自动写回账号池"
+                            if result.get("cookie_changed")
+                            else "Cookie 未变化，但服务器确认当前会话仍有效"
+                        ) if synced else (
+                            "Cookie 未变化，服务器验证失败：" + notify_error
+                            if not result.get("cookie_changed")
+                            else "Cookie 已获取，但回写账号池失败：" + notify_error
+                        ),
                     )
             if i < len(accounts) - 1:
                 time.sleep(5)
