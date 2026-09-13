@@ -247,6 +247,24 @@ class UpdateAccountRequest(BaseModel):
     label: Optional[str] = None
 
 
+class TestAccountRequest(BaseModel):
+    model: str = "gemini-pro"
+    prompt: str = "Say ok"
+
+
+@router.post("/accounts/{account_id}/test")
+async def test_account_generation(account_id: str, req: TestAccountRequest):
+    """对指定账号发起真实生成测试（自定义模型/Prompt），返回耗时与结果摘要。"""
+    try:
+        result = await account_pool.test_account_generation(account_id, req.model, req.prompt)
+    except ValueError:
+        return JSONResponse(
+            status_code=404,
+            content={"error": {"message": f"Account {account_id} not found", "type": "not_found"}},
+        )
+    return result
+
+
 @router.patch("/accounts/{account_id}")
 async def update_account(account_id: str, req: UpdateAccountRequest):
     """编辑账号元信息（当前支持重命名标签），成功后立即持久化到 accounts.json。"""

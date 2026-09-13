@@ -623,6 +623,26 @@ class AccountPool:
                 return True
         return False
 
+    async def test_account_generation(self, account_id: str, model: str, prompt: str) -> dict:
+        """对指定账号发起真实生成请求（测试用途，不计入池调度统计）。"""
+        for a in self._accounts:
+            if a.id == account_id:
+                if not a.client:
+                    return {"success": False, "error": "Account client not initialized"}
+                start = time.time()
+                try:
+                    result = await a.client.generate(prompt=prompt, model=model)
+                except Exception as e:
+                    return {"success": False, "error": str(e)[:300]}
+                return {
+                    "success": True,
+                    "latency_ms": int((time.time() - start) * 1000),
+                    "model": model,
+                    "text": (result.get("text") or "")[:500],
+                    "images": len(result.get("images") or []),
+                }
+        raise ValueError(f"Account {account_id} not found")
+
     async def check_account(self, account_id: str) -> dict:
         for account in self._accounts:
             if account.id == account_id:

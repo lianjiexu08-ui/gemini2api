@@ -494,6 +494,7 @@ curl -X POST http://localhost:5918/v1/images/generations \
 | GET | `/accounts` | 所有账号列表及状态 |
 | POST | `/accounts` | 动态添加新账号 |
 | PATCH | `/accounts/{id}` | 编辑账号（当前支持重命名标签，成功后持久化） |
+| POST | `/accounts/{id}/test` | 真实生成测试（自定义模型/Prompt，返回耗时与结果摘要） |
 | DELETE | `/accounts/{id}` | 移除指定账号 |
 | GET | `/accounts/{id}/check` | 检测单个账号状态 |
 | GET | `/check-account` | 检测所有账号状态 |

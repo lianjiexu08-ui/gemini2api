@@ -448,6 +448,9 @@ async function loadAccounts() {
                     <button class="btn btn-sm btn-outline acc-check-btn" data-account-id="${idEsc}">
                         <i class="fas fa-heartbeat"></i> ${t('accounts.check')}
                     </button>
+                    <button class="btn btn-sm btn-outline acc-test-btn" data-account-id="${idEsc}" data-account-label="${labelEsc}">
+                        <i class="fas fa-vial"></i> ${t('accounts.test')}
+                    </button>
                     <button class="btn btn-sm btn-outline acc-edit-btn" data-account-id="${idEsc}" data-account-label="${labelEsc}">
                         <i class="fas fa-edit"></i> ${t('accounts.editLabel')}
                     </button>
@@ -465,6 +468,9 @@ async function loadAccounts() {
         // 通过 dataset 取回原始（已解码）值绑定事件，避免用户数据出现在 inline JS 字符串里
         container.querySelectorAll('.acc-check-btn').forEach(btn => {
             btn.addEventListener('click', () => checkAccount(btn.dataset.accountId));
+        });
+        container.querySelectorAll('.acc-test-btn').forEach(btn => {
+            btn.addEventListener('click', () => openTestAccountModal(btn.dataset.accountId, btn.dataset.accountLabel || ''));
         });
         container.querySelectorAll('.acc-edit-btn').forEach(btn => {
             btn.addEventListener('click', () => openEditLabelModal(btn.dataset.accountId, btn.dataset.accountLabel || ''));
@@ -550,6 +556,118 @@ async function submitAddAccount() {
         await loadDashboard();
     } catch (error) {
         showToast(`${t('accounts.addFailed')}: ${error.message}`, 'error');
+    }
+}
+
+// ============================================================================
+// Test Account Modal
+// ============================================================================
+
+let testAccountId = null;
+
+async function _loadTestModels(selected) {
+    const select = document.getElementById('test-model');
+    if (!select) return;
+    select.innerHTML = '';
+    try {
+        const data = await apiCall('GET', '/openai/v1/models');
+        const models = (data.data || []).map(m => m.id);
+        models.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m;
+            opt.textContent = m;
+            if (m === selected) opt.selected = true;
+            select.appendChild(opt);
+        });
+    } catch (e) {
+        // 模型列表拿不到时保底公开模型
+        ['gemini-pro', 'gemini-flash', 'gemini-flash-thinking', 'gemini-flash-lite'].forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m;
+            opt.textContent = m;
+            select.appendChild(opt);
+        });
+    }
+}
+
+function openTestAccountModal(accountId, label) {
+    testAccountId = accountId;
+    const modal = document.getElementById('testAccountModal');
+    const title = document.getElementById('testAccountTitle');
+    if (title) title.textContent = `${t('accounts.test')} - ${label || accountId}`;
+    const promptInput = document.getElementById('test-prompt');
+    if (promptInput && !promptInput.value) promptInput.value = 'Say ok';
+    const result = document.getElementById('test-result');
+    if (result) { result.style.display = 'none'; result.textContent = ''; }
+    _loadTestModels('gemini-pro');
+    if (modal) modal.classList.add('active');
+}
+
+function closeTestAccountModal() {
+    const modal = document.getElementById('testAccountModal');
+    if (modal) modal.classList.remove('active');
+    testAccountId = null;
+}
+
+function _renderTestResult(text, isError) {
+    const result = document.getElementById('test-result');
+    if (!result) return;
+    result.style.display = 'block';
+    result.style.color = isError ? 'var(--danger, #e74c3c)' : '';
+    result.textContent = text;
+}
+
+async function submitTestAccount() {
+    if (!testAccountId) {
+        showToast('未选择账号', 'error');
+        return;
+    }
+    const model = document.getElementById('test-model')?.value || 'gemini-pro';
+    const prompt = document.getElementById('test-prompt')?.value.trim() || 'Say ok';
+    const btn = document.getElementById('confirmTestAccount');
+    if (btn) btn.disabled = true;
+    _renderTestResult(t('accounts.testing'), false);
+    try {
+        const r = await apiCall('POST', `/admin/accounts/${testAccountId}/test`, { model, prompt });
+        if (r.success) {
+            const imgNote = r.images ? ` (+${r.images} image(s))` : '';
+            _renderTestResult(`✓ ${r.latency_ms}ms${imgNote}\n${r.text || '(no text)'}`, false);
+        } else {
+            _renderTestResult(`✗ ${r.error || 'unknown error'}`, true);
+        }
+    } catch (error) {
+        _renderTestResult(`✗ ${error.message}`, true);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+async function testAllAccounts() {
+    const model = document.getElementById('test-model')?.value || 'gemini-pro';
+    const prompt = document.getElementById('test-prompt')?.value.trim() || 'Say ok';
+    const btn = document.getElementById('confirmTestAccount');
+    if (btn) btn.disabled = true;
+    try {
+        const data = await apiCall('GET', '/admin/accounts');
+        const accounts = data.accounts || [];
+        const lines = [];
+        for (const acc of accounts) {
+            lines.push(`${acc.id} (${acc.label || ''}) ...`);
+            _renderTestResult(lines.join('\n'), false);
+            try {
+                const r = await apiCall('POST', `/admin/accounts/${acc.id}/test`, { model, prompt });
+                lines[lines.length - 1] = r.success
+                    ? `${acc.id} (${acc.label || ''}): ✓ ${r.latency_ms}ms`
+                    : `${acc.id} (${acc.label || ''}): ✗ ${r.error || 'unknown'}`;
+            } catch (e) {
+                lines[lines.length - 1] = `${acc.id} (${acc.label || ''}): ✗ ${e.message}`;
+            }
+            _renderTestResult(lines.join('\n'), false);
+        }
+    } catch (error) {
+        _renderTestResult(`✗ ${error.message}`, true);
+    } finally {
+        if (btn) btn.disabled = false;
     }
 }
 
@@ -1271,6 +1389,41 @@ function initEventListeners() {
         if (confirmEditBtn) {
             confirmEditBtn.addEventListener('click', submitEditLabel);
         }
+    }
+
+    // Test account modal
+    const testModal = document.getElementById('testAccountModal');
+    if (testModal) {
+        testModal.querySelectorAll('.modal-close, .modal-cancel').forEach(btn => {
+            btn.addEventListener('click', closeTestAccountModal);
+        });
+        testModal.addEventListener('click', (e) => {
+            if (e.target === testModal) closeTestAccountModal();
+        });
+        const confirmTestBtn = document.getElementById('confirmTestAccount');
+        if (confirmTestBtn) {
+            // testAccountId 为空表示「全部测试」模式
+            confirmTestBtn.addEventListener('click', () => {
+                if (testAccountId) submitTestAccount(); else testAllAccounts();
+            });
+        }
+    }
+
+    // Test all accounts button
+    const testAllBtn = document.getElementById('testAllAccountsBtn');
+    if (testAllBtn) {
+        testAllBtn.addEventListener('click', () => {
+            testAccountId = null;
+            const modal = document.getElementById('testAccountModal');
+            const title = document.getElementById('testAccountTitle');
+            if (title) title.textContent = t('accounts.testAll');
+            const promptInput = document.getElementById('test-prompt');
+            if (promptInput && !promptInput.value) promptInput.value = 'Say ok';
+            const result = document.getElementById('test-result');
+            if (result) { result.style.display = 'none'; result.textContent = ''; }
+            _loadTestModels('gemini-pro');
+            if (modal) modal.classList.add('active');
+        });
     }
 
     // Playground send
