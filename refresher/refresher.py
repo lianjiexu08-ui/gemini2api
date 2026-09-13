@@ -383,7 +383,7 @@ def refresh_account(browser, account):
                     "id": account_id,
                     "label": label,
                     "status": "expired",
-                    "error": "Google 要求人工完成 reCAPTCHA/身份验证，服务器自动登录被拦截",
+                    "error": "Google 要求人工完成 reCAPTCHA/身份验证，服务器自动登录被拦截；请在本机 Chrome 完成一次验证后，用捕获插件更新该账号 Cookie",
                     "updated_at": time.time(),
                 }
             print(f"  [{label}] FAILED - still on Google login page")
