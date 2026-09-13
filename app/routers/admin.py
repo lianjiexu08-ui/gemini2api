@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import platform
@@ -76,6 +77,22 @@ def _resolve_credentials(
         if parsed_psidts:
             psidts = parsed_psidts
     return psid, psidts
+
+
+async def _auto_label_account(account_id: str):
+    """标签留空时，从网页会话抓取 Google 账号邮箱作为标签（后台异步执行）。"""
+    await asyncio.sleep(0)  # 让上号响应先返回
+    for acc in account_pool.accounts:
+        if acc.id == account_id and acc.client:
+            try:
+                email = await asyncio.wait_for(acc.client.get_account_email(), timeout=20)
+            except Exception as e:
+                logger.debug(f"auto label failed for {account_id}: {e}")
+                return
+            if email:
+                account_pool.rename_account(account_id, email)
+                logger.info(f"Account {account_id} auto-labeled as {email}")
+            return
 
 
 @router.post("/reload-cookies")
@@ -198,6 +215,9 @@ async def add_account(req: AddAccountRequest):
             psidts=psidts,
             label=req.label,
         )
+        if not (req.label or "").strip():
+            # 标签留空：后台自动抓 Google 账号邮箱命名，不阻塞上号响应
+            asyncio.create_task(_auto_label_account(account.id))
         return {
             "status": "ok",
             "account": {

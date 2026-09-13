@@ -98,6 +98,21 @@ BATCHEXECUTE_URL = "https://gemini.google.com/_/BardChatUi/data/batchexecute"
 
 MODEL_HEADER_KEY = "x-goog-ext-525001261-jspb"
 
+# 自动命名标签时忽略的邮箱域名（网页 HTML 里常见的官方/示例地址）
+_NON_USER_EMAIL_DOMAINS = ("google.com", "google.org", "googlegroups.com", "example.com")
+
+
+def _extract_account_email(body: str) -> str:
+    """从 Gemini 网页 HTML 中提取当前 Google 账号邮箱（WIZ 引导数据中含账号信息）。
+    取第一个非 Google 官方/示例域名的匹配，找不到返回空串。"""
+    for m in re.finditer(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}", body):
+        email = m.group(0)
+        domain = email.rsplit("@", 1)[-1].lower()
+        if any(domain == d or domain.endswith("." + d) for d in _NON_USER_EMAIL_DOMAINS):
+            continue
+        return email
+    return ""
+
 GEMINI_MODELS = {
     "gemini-3-pro": {"id": "9d8ca3786ebdfbea", "capacity": 1, "pro_only": False, "family": "pro", "model_number": 3},
     "gemini-3-flash": {"id": "fbb127bbb056c959", "capacity": 1, "pro_only": False, "family": "flash", "model_number": 1},
@@ -443,6 +458,7 @@ class GeminiWebClient:
         self._check_history: deque[dict] = deque(maxlen=20)
         self._last_check_result: dict | None = None
         self._last_reload_error: str = ""
+        self._account_email: str = ""
 
     async def initialize(self):
         fingerprint_config.load()
@@ -648,6 +664,9 @@ class GeminiWebClient:
                 return
 
             body = resp.text
+            email = _extract_account_email(body)
+            if email:
+                self._account_email = email
             token_match = re.search(r'"SNlM0e":"([^"]+)"', body)
             if token_match:
                 self._session_token = token_match.group(1)
@@ -1126,6 +1145,17 @@ class GeminiWebClient:
         inner[80] = 2                         # 2 = extended thinking
         outer = json.dumps([None, json.dumps(inner)])
         return outer, uuid_val
+
+    async def get_account_email(self) -> str:
+        """当前 Google 账号邮箱。优先返回会话初始化时从网页缓存的值；
+        未缓存（老会话）则触发一次页面刷新补齐。取不到返回空串。"""
+        if self._account_email:
+            return self._account_email
+        try:
+            await self._obtain_session_token()
+        except Exception as e:
+            logger.debug(f"get_account_email refresh failed: {e}")
+        return self._account_email
 
     async def generate(self, prompt: str, model: str, conversation_id: str = "",
                        attachments: list | None = None, gem_id: str | None = None,
