@@ -451,14 +451,12 @@ const _reloginPollers = new Map();
 const _manualReloginWindows = new Map();
 const _manualReloginOpened = new Set();
 
-function openManualReloginWindow(accountId) {
+function openManualReloginWindow(accountId, authuser = '') {
     let popup = null;
     try {
-        popup = window.open('about:blank', `gemini2api-manual-${accountId}`, 'popup,width=520,height=760,resizable=yes,scrollbars=yes');
-        if (popup) {
-            popup.document.title = '等待 Google 验证';
-            popup.document.body.innerHTML = '<p style="font:16px sans-serif;padding:24px">等待服务器判断是否需要人工验证…</p>';
-        }
+        // 在用户点击的同步调用栈中直接打开 Google 登录页，避免先开空白页
+        // 导致用户看不到窗口或浏览器把后续跳转当成弹窗拦截。
+        popup = window.open(manualReloginUrl(authuser), `gemini2api-manual-${accountId}`, 'popup,width=520,height=760,resizable=yes,scrollbars=yes');
     } catch (e) { /* 浏览器可能阻止弹窗，后续仍显示日志和登录链接 */ }
     if (popup) _manualReloginWindows.set(accountId, popup);
     return popup;
@@ -470,7 +468,7 @@ function manualReloginUrl(authuser) {
 }
 
 function handleManualReloginRequired(status, options = {}) {
-    if (_manualReloginOpened.has(status.account_id)) return;
+    if (!options.allowManualWindow || _manualReloginOpened.has(status.account_id)) return;
     _manualReloginOpened.add(status.account_id);
     const popup = options.manualWindow || _manualReloginWindows.get(status.account_id);
     if (popup && !popup.closed) {
@@ -633,13 +631,13 @@ async function loadAccounts() {
         container.querySelectorAll('.acc-relogin-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const accountId = btn.dataset.accountId;
-                const manualWindow = openManualReloginWindow(accountId);
+                const manualWindow = openManualReloginWindow(accountId, btn.dataset.authuser || '');
                 _manualReloginOpened.delete(accountId);
                 btn.disabled = true;
                 apiCall('POST', `/admin/accounts/${accountId}/relogin`)
                     .then(() => {
                         showToast('服务器已开始自动重登；如遇 Google 验证会在此窗口交给你处理', 'success');
-                        pollReloginStatus(accountId, { manualWindow, authuser: btn.dataset.authuser || '' });
+                        pollReloginStatus(accountId, { manualWindow, authuser: btn.dataset.authuser || '', allowManualWindow: true });
                     })
                     .catch(() => {
                         if (manualWindow && !manualWindow.closed) manualWindow.close();
@@ -656,6 +654,18 @@ async function loadAccounts() {
         });
         container.querySelectorAll('.acc-remove-btn').forEach(btn => {
             btn.addEventListener('click', () => removeAccount(btn.dataset.accountId));
+        });
+        // 页面刷新后恢复每个账号最近一次重登日志，避免只看到旧的卡片状态。
+        accounts.forEach(account => {
+            apiCall('GET', `/admin/accounts/${encodeURIComponent(account.id)}/relogin/status`)
+                .then(status => {
+                    if (!status || status.status === 'idle') return;
+                    renderReloginStatus(status);
+                    if (['queued', 'processing', 'cookies_found'].includes(status.status)) {
+                        pollReloginStatus(account.id, { allowManualWindow: false });
+                    }
+                })
+                .catch(() => { /* 日志接口不可用时不影响账号列表 */ });
         });
     } catch (error) {
         console.error('加载账号列表失败:', error);
