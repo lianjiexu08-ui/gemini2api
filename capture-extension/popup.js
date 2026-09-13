@@ -1,6 +1,7 @@
 const $ = (id) => document.getElementById(id);
 let pendingCookie = null;
 let pendingAuthuser = null;
+let pendingAccountId = null;
 
 function showStatus(text, cls) {
     const el = $('status');
@@ -128,6 +129,8 @@ $('save').addEventListener('click', async () => {
 $('capture').addEventListener('click', async () => {
     pendingCookie = null;
     pendingAuthuser = null;
+    pendingAccountId = null;
+    $('confirm').textContent = '确认上号';
     $('confirm').classList.add('hidden');
     try {
         const cookies = await chrome.cookies.getAll({ domain: '.google.com', storeId: $('store')?.value || undefined });
@@ -162,10 +165,14 @@ $('capture').addEventListener('click', async () => {
             return;
         }
         if (preview.duplicate_of) {
-            showStatus(`⚠ ${who} 已在号池：${preview.duplicate_of}，无需重复添加`, 'warn');
-            pendingCookie = null;
+            pendingAccountId = preview.duplicate_of;
+            showStatus(`⚠ ${who} 已在号池：${preview.duplicate_of}\n确认后将更新该账号 Cookie`, 'warn');
+            $('confirm').textContent = '更新已有账号 Cookie';
+            $('confirm').classList.remove('hidden');
             return;
         }
+        pendingAccountId = null;
+        $('confirm').textContent = '确认上号';
         showStatus(`→ ${who}\n确认后将上号（标签自动取邮箱）`);
         $('confirm').classList.remove('hidden');
     } catch (e) {
@@ -178,14 +185,25 @@ $('confirm').addEventListener('click', async () => {
     $('confirm').disabled = true;
     try {
         const { server, adminKey } = await getCfg();
-        const r = await api(server, adminKey, 'POST', '/admin/accounts', { cookie: pendingCookie, authuser: pendingAuthuser });
-        if (r.created === false) {
+        const updating = pendingAccountId;
+        const path = updating
+            ? `/admin/accounts/${encodeURIComponent(updating)}/cookies`
+            : '/admin/accounts';
+        const method = updating ? 'PUT' : 'POST';
+        const r = await api(server, adminKey, method, path, updating
+            ? { cookie: pendingCookie }
+            : { cookie: pendingCookie, authuser: pendingAuthuser });
+        if (updating) {
+            showStatus(`✓ 已更新账号 Cookie：${updating}`);
+        } else if (r.created === false) {
             showStatus(`⚠ 该账号已存在：${r.account.id}，已更新凭据，未重复添加`, 'warn');
         } else {
             showStatus(`✓ 已上号：${r.account.id}（标签自动获取中，稍后可见邮箱）`);
         }
         pendingCookie = null;
         pendingAuthuser = null;
+        pendingAccountId = null;
+        $('confirm').textContent = '确认上号';
         $('confirm').classList.add('hidden');
     } catch (e) {
         showStatus(`✗ 上号失败：${e.message}`, 'err');

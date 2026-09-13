@@ -558,8 +558,9 @@ async def update_account_cookies(account_id: str, req: UpdateCookiesRequest):
             if account.client:
                 result = await account.client.reload_cookies(psid=psid, psidts=psidts)
                 if result.get("success"):
-                    # 同步池内字段并持久化，否则容器重建后凭据回退为旧值
-                    account_pool.update_credentials(account_id, psid=req.psid, psidts=req.psidts)
+                    # 使用解析后的值同步池内字段并持久化；请求可能只传整段 cookie，
+                    # 此时 req.psid/req.psidts 为空，必须保存 _resolve_credentials 的结果。
+                    account_pool.update_credentials(account_id, psid=psid, psidts=psidts)
                     if req.proxy is not None:
                         account_pool.update_proxy(account_id, req.proxy)
                     return {"status": "ok", "message": f"Account {account_id} cookies updated"}
