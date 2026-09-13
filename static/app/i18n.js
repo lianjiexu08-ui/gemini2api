@@ -105,6 +105,7 @@ const translations = {
         'accounts.previewFailed': 'Cookie 无效或已过期',
         'accounts.previewDuplicate': '该账号已在号池中',
         'accounts.updateCookie': '更新Cookie',
+        'accounts.relogin': '重登',
         'accounts.editLabel': '编辑标签',
         'accounts.confirmEditLabel': '确认修改',
         'accounts.orPasteCookie': '或直接粘贴完整 Cookie（自动解析）',

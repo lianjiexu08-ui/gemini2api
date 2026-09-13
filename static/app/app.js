@@ -457,6 +457,9 @@ async function loadAccounts() {
                     <button class="btn btn-sm btn-outline acc-cookie-btn" data-account-id="${idEsc}" data-account-label="${labelEsc}">
                         <i class="fas fa-cookie-bite"></i> ${t('accounts.updateCookie')}
                     </button>
+                    <button class="btn btn-sm btn-outline acc-relogin-btn" data-authuser="${escapeAttr(account.authuser || '')}">
+                        <i class="fas fa-right-to-bracket"></i> ${t('accounts.relogin')}
+                    </button>
                     <button class="btn btn-sm btn-danger acc-remove-btn" data-account-id="${idEsc}">
                         <i class="fas fa-trash"></i> ${t('accounts.delete')}
                     </button>
@@ -471,6 +474,14 @@ async function loadAccounts() {
         });
         container.querySelectorAll('.acc-test-btn').forEach(btn => {
             btn.addEventListener('click', () => openTestAccountModal(btn.dataset.accountId, btn.dataset.accountLabel || ''));
+        });
+        container.querySelectorAll('.acc-relogin-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const authuser = btn.dataset.authuser;
+                const path = authuser ? `/u/${encodeURIComponent(authuser)}/app` : '/app';
+                window.open(`https://gemini.google.com${path}`, '_blank', 'noopener');
+                showToast('请在打开的 Gemini 页面完成登录，再用插件重新捕获 Cookie', 'info');
+            });
         });
         container.querySelectorAll('.acc-edit-btn').forEach(btn => {
             btn.addEventListener('click', () => openEditLabelModal(btn.dataset.accountId, btn.dataset.accountLabel || ''));
