@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from app.config import APP_VERSION, mask_secret
-from app.core.account_pool import account_pool
+from app.core.account_pool import account_pool, _normalize_authuser
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -295,7 +295,7 @@ async def preview_account(req: PreviewAccountRequest):
             status_code=400,
             content={"error": {"message": "psid is required: provide psid or a cookie string containing __Secure-1PSID", "type": "invalid_request"}},
         )
-    authuser = None if req.authuser is None or str(req.authuser).strip() == "" else str(req.authuser).strip()
+    authuser = _normalize_authuser(req.authuser)
     duplicate = next((a for a in account_pool.accounts if a.psid == psid and a.authuser == authuser), None)
     from app.core.gemini_client import GeminiWebClient
 

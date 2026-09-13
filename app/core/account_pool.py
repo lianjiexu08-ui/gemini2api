@@ -194,7 +194,7 @@ class AccountPool:
                     id=item.get("id", f"account-{i}"),
                     psid=psid.strip().strip('"').strip("'").rstrip(";"),
                     psidts=(item.get("psidts") or "").strip().strip('"').strip("'").rstrip(";"),
-                    authuser=(str(item.get("authuser")).strip() if item.get("authuser") is not None and str(item.get("authuser")).strip() else None),
+                    authuser=_normalize_authuser(item.get("authuser")),
                     label=item.get("label", f"account-{i}"),
                 )
             except Exception as e:
@@ -585,7 +585,7 @@ class AccountPool:
         幂等重上避免了旧实现重复入池（同号两条、配额浪费、风控翻倍）。"""
         norm_psid = psid.strip().strip('"').strip("'").rstrip(";")
         norm_psidts = psidts.strip().strip('"').strip("'").rstrip(";")
-        norm_authuser = None if authuser is None or str(authuser).strip() == "" else str(authuser).strip()
+        norm_authuser = _normalize_authuser(authuser)
         for a in self._accounts:
             if a.psid == norm_psid and a.authuser == norm_authuser:
                 a.psidts = norm_psidts or a.psidts
