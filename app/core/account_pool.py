@@ -109,6 +109,7 @@ class Account:
     label: str = ""
     # Google authuser selector for multi-login profiles ("0", "1", ...).
     authuser: str | None = None
+    proxy: str | None = None
     status: AccountStatus = AccountStatus.ACTIVE
     request_count: int = 0
     error_count: int = 0
@@ -205,6 +206,7 @@ class AccountPool:
                     psid=psid.strip().strip('"').strip("'").rstrip(";"),
                     psidts=(item.get("psidts") or "").strip().strip('"').strip("'").rstrip(";"),
                     authuser=_normalize_authuser(item.get("authuser")),
+                    proxy=(str(item.get("proxy")).strip() if item.get("proxy") else None),
                     label=item.get("label", f"account-{i}"),
                 )
             except Exception as e:
@@ -234,7 +236,7 @@ class AccountPool:
         self._accounts.append(account)
 
     async def _init_account_client(self, account: Account):
-        client = GeminiWebClient(psid=account.psid, psidts=account.psidts, authuser=account.authuser)
+        client = GeminiWebClient(psid=account.psid, psidts=account.psidts, authuser=account.authuser, proxy=account.proxy)
         await client.initialize()
         account.client = client
         if client.is_healthy:
@@ -588,7 +590,7 @@ class AccountPool:
         return available[0]
 
     async def add_account(
-        self, psid: str, psidts: str, label: str = "", authuser: str | int | None = None
+        self, psid: str, psidts: str, label: str = "", authuser: str | int | None = None, proxy: str | None = None
     ) -> tuple[Account, bool]:
         """上号。同 PSID 已存在时转为「续命」：更新凭据 + 清毒罐 + 热重载 client，
         返回 (账号, False)；新号正常入池返回 (账号, True)。
@@ -596,9 +598,11 @@ class AccountPool:
         norm_psid = psid.strip().strip('"').strip("'").rstrip(";")
         norm_psidts = psidts.strip().strip('"').strip("'").rstrip(";")
         norm_authuser = _normalize_authuser(authuser)
+        norm_proxy = str(proxy).strip() if proxy and str(proxy).strip() else None
         for a in self._accounts:
             if a.psid == norm_psid and a.authuser == norm_authuser:
                 a.psidts = norm_psidts or a.psidts
+                a.proxy = norm_proxy or a.proxy
                 if label and label != a.label:
                     a.label = label
                 self._save_to_file()
@@ -616,6 +620,7 @@ class AccountPool:
             psid=norm_psid,
             psidts=norm_psidts,
             authuser=norm_authuser,
+            proxy=norm_proxy,
             label=label or account_id,
         )
         await self._init_account_client(account)
@@ -643,6 +648,14 @@ class AccountPool:
                     a.psid = psid.strip().strip('"').strip("'").rstrip(";")
                 if psidts:
                     a.psidts = psidts.strip().strip('"').strip("'").rstrip(";")
+                self._save_to_file()
+                return True
+        return False
+
+    def update_proxy(self, account_id: str, proxy: str | None) -> bool:
+        for a in self._accounts:
+            if a.id == account_id:
+                a.proxy = str(proxy).strip() if proxy and str(proxy).strip() else None
                 self._save_to_file()
                 return True
         return False
@@ -794,6 +807,7 @@ class AccountPool:
                 "label": a.label,
                 "psid": a.psid,
                 "authuser": a.authuser,
+                "proxy": a.proxy,
                 "status": a.status.value,
                 "request_count": a.request_count,
                 "error_count": a.error_count,
@@ -987,6 +1001,7 @@ class AccountPool:
                 "psid": a.psid,
                 "psidts": a.psidts,
                 "authuser": a.authuser,
+                "proxy": a.proxy,
                 "label": a.label,
             })
         path = Path(settings.accounts_file)

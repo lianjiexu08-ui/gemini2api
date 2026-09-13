@@ -41,6 +41,7 @@ class AddAccountRequest(BaseModel):
     label: str = ""
     # Google 多账号选择器：同一 Profile 中通常为 0、1、2...
     authuser: Optional[str] = None
+    proxy: Optional[str] = None
     # 直接粘贴整段 Cookie 字符串（如从浏览器 F12 复制的完整 Cookie 头），
     # 服务端自动解析 __Secure-1PSID / __Secure-1PSIDTS，与 psid/psidts 字段二选一
     cookie: Optional[str] = None
@@ -217,6 +218,7 @@ async def add_account(req: AddAccountRequest):
             psidts=psidts,
             label=req.label,
             authuser=req.authuser,
+            proxy=req.proxy,
         )
         if created and not (req.label or "").strip():
             # 新号且标签留空：后台自动抓 Google 账号邮箱命名，不阻塞上号响应
@@ -265,10 +267,12 @@ class UpdateCookiesRequest(BaseModel):
     psidts: str = ""
     # 同 AddAccountRequest：可直接粘贴整段 Cookie 字符串自动解析
     cookie: Optional[str] = None
+    proxy: Optional[str] = None
 
 
 class UpdateAccountRequest(BaseModel):
     label: Optional[str] = None
+    proxy: Optional[str] = None
 
 
 class TestAccountRequest(BaseModel):
@@ -283,6 +287,7 @@ class PreviewAccountRequest(BaseModel):
     psid: Optional[str] = None
     psidts: str = ""
     authuser: Optional[str] = None
+    proxy: Optional[str] = None
     no_wipe: bool = False  # 纯查询（如插件 whoami）时不清毒罐，避免误伤持久化状态
 
 
@@ -299,7 +304,7 @@ async def preview_account(req: PreviewAccountRequest):
     duplicate = next((a for a in account_pool.accounts if a.psid == psid and a.authuser == authuser), None)
     from app.core.gemini_client import GeminiWebClient
 
-    client = GeminiWebClient(psid=psid, psidts=psidts, authuser=authuser)
+    client = GeminiWebClient(psid=psid, psidts=psidts, authuser=authuser, proxy=req.proxy)
     # 预览要回答的是「这段（新提交的）Cookie 是谁/活没活」，必须先清掉磁盘上
     # 同 PSID 的陈旧 Cookie 罐，否则「磁盘优先」会拿旧 cookie 判新 cookie 的死刑。
     # no_wipe（纯查询场景）跳过清罐，避免误伤号池持久化状态。
@@ -349,13 +354,20 @@ async def test_account_generation(account_id: str, req: TestAccountRequest):
 @router.patch("/accounts/{account_id}")
 async def update_account(account_id: str, req: UpdateAccountRequest):
     """编辑账号元信息（当前支持重命名标签），成功后立即持久化到 accounts.json。"""
-    if req.label is None or not req.label.strip():
+    if req.label is None and req.proxy is None:
         return JSONResponse(
             status_code=400,
             content={"error": {"message": "label is required and must not be empty", "type": "invalid_request"}},
         )
-    if account_pool.rename_account(account_id, req.label):
-        return {"status": "ok", "message": f"Account {account_id} updated", "label": req.label.strip()}
+    updated = False
+    if req.label is not None:
+        if not req.label.strip():
+            return JSONResponse(status_code=400, content={"error": {"message": "label must not be empty", "type": "invalid_request"}})
+        updated = account_pool.rename_account(account_id, req.label) or updated
+    if req.proxy is not None:
+        updated = account_pool.update_proxy(account_id, req.proxy) or updated
+    if updated:
+        return {"status": "ok", "message": f"Account {account_id} updated"}
     return JSONResponse(
         status_code=404,
         content={"error": {"message": f"Account {account_id} not found", "type": "not_found"}},
@@ -382,6 +394,8 @@ async def update_account_cookies(account_id: str, req: UpdateCookiesRequest):
                 if result.get("success"):
                     # 同步池内字段并持久化，否则容器重建后凭据回退为旧值
                     account_pool.update_credentials(account_id, psid=req.psid, psidts=req.psidts)
+                    if req.proxy is not None:
+                        account_pool.update_proxy(account_id, req.proxy)
                     return {"status": "ok", "message": f"Account {account_id} cookies updated"}
                 return JSONResponse(
                     status_code=503,

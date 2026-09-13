@@ -841,6 +841,7 @@ async function submitUpdateCookie() {
     const cookie = document.getElementById('update-cookie')?.value.trim() || '';
     const psid = document.getElementById('update-psid')?.value.trim();
     const psidts = document.getElementById('update-psidts')?.value.trim() || '';
+    const proxy = document.getElementById('update-proxy')?.value.trim() || '';
 
     if (!cookie && !psid) {
         showToast('请粘贴完整 Cookie 或填写 __Secure-1PSID', 'warning');
@@ -856,6 +857,7 @@ async function submitUpdateCookie() {
         showToast('正在更新 Cookie...', 'info');
         // 整段 Cookie 优先，服务端自动解析
         const payload = cookie ? { cookie } : { psid, psidts };
+        if (proxy) payload.proxy = proxy;
         await apiCall('PUT', `/admin/accounts/${updateCookieAccountId}/cookies`, payload);
         showToast('Cookie 更新成功', 'success');
         closeUpdateCookieModal();

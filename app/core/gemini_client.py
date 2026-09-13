@@ -435,13 +435,14 @@ def _rand_reqid() -> int:
 
 
 class GeminiWebClient:
-    def __init__(self, psid: str | None = None, psidts: str | None = None, authuser: str | int | None = None):
+    def __init__(self, psid: str | None = None, psidts: str | None = None, authuser: str | int | None = None, proxy: str | None = None):
         self._psid = psid or settings.gemini_psid
         self._psidts = psidts or settings.gemini_psidts
         # Google multi-login selects the active account via authuser while sharing the
         # profile PSID. Keep this selector with the credential so one Profile can host
         # multiple Gemini accounts.
         self._authuser = None if authuser is None or str(authuser).strip() == "" else str(authuser).strip()
+        self._proxy = proxy.strip() if proxy and str(proxy).strip() else None
         self._session_uuid: str = str(uuid.uuid4()).upper()
         self._session_token: str = ""
         self._push_id: str = ""
@@ -510,6 +511,7 @@ class GeminiWebClient:
         self._http = AsyncSession(
             impersonate=self._current_target,
             timeout=60,
+            proxy=self._proxy,
         )
 
         await self._obtain_session_token()
@@ -569,7 +571,7 @@ class GeminiWebClient:
                 return
             logger.info(f"TLS 指纹更新: {self._current_target} -> {target}")
             old = self._http
-            self._http = AsyncSession(impersonate=target, timeout=60)
+            self._http = AsyncSession(impersonate=target, timeout=60, proxy=self._proxy)
             self._current_target = target
             if old is not None:
                 try:
@@ -1317,7 +1319,7 @@ class GeminiWebClient:
         last_images: list = []
         chunk_timeout = 120      # 单个 chunk 最长等待（兜底 #215 timeout 失效）
 
-        session = AsyncSession(impersonate=self._current_target, timeout=180)
+        session = AsyncSession(impersonate=self._current_target, timeout=180, proxy=self._proxy)
         try:
             async with session.stream(
                 "POST", self._account_url(GENERATE_URL),
@@ -1715,7 +1717,7 @@ class GeminiWebClient:
             # Recreate HTTP session to avoid accumulated cookie conflicts
             if self._http:
                 await self._http.close()
-            self._http = AsyncSession(impersonate=self._current_target, timeout=60)
+            self._http = AsyncSession(impersonate=self._current_target, timeout=60, proxy=self._proxy)
 
             self._cookie_jar.set("__Secure-1PSID", self._psid)
             if self._psidts:
