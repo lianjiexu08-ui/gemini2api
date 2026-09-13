@@ -12,6 +12,19 @@ async function getCfg() {
     return chrome.storage.local.get(['server', 'adminKey']);
 }
 
+async function getPageEmail() {
+    try {
+        const tabs = await chrome.tabs.query({active: true, lastFocusedWindow: true});
+        const tab = tabs[0];
+        if (!tab?.id || !/^https:\/\/(www\.)?(google\.com|google\.[^/]+)\//.test(tab.url || '')) return '';
+        const [{result}] = await chrome.scripting.executeScript({target: {tabId: tab.id}, func: () => {
+            const text = document.body?.innerText || '';
+            return (text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig) || [])[0] || '';
+        }});
+        return result || '';
+    } catch (_) { return ''; }
+}
+
 async function api(server, key, method, path, body) {
     const resp = await fetch(server.replace(/\/$/, '') + path, {
         method,
@@ -126,6 +139,12 @@ $('capture').addEventListener('click', async () => {
             return;
         }
         const who = preview.email || `psid…${preview.psid_suffix}`;
+        const pageEmail = await getPageEmail();
+        if (pageEmail && preview.email && pageEmail.toLowerCase() !== preview.email.toLowerCase()) {
+            showStatus(`✗ 账号不一致：当前页面是 ${pageEmail}，Cookie 属于 ${preview.email}。已阻止上号，请使用该账号独立 Profile。`, 'err');
+            pendingCookie = null;
+            return;
+        }
         if (preview.duplicate_of) {
             showStatus(`→ ${who}\n⚠ 该账号已在号池中（${preview.duplicate_of}），无需重复上号`, 'warn');
             pendingCookie = null;
