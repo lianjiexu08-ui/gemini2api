@@ -12,6 +12,8 @@ python3 tools/relogin_helper.py set account-1 \
 
 python3 tools/relogin_helper.py launch account-1
 python3 tools/relogin_helper.py code account-1
+# 本机辅助自动填写（需要给 Terminal/osascript 开启辅助功能权限）
+python3 tools/relogin_helper.py auto account-1
 ```
 
-启动后在该 Profile 完成 Google 登录；TOTP 可以用 `code` 命令在本机生成。Google 手机确认、短信验证码和安全密钥无法安全地无人值守提交，仍需要人工确认。
+`auto` 只在本机尝试填写邮箱、密码和 TOTP，不会把秘密发到服务器。Google 手机确认、短信验证码、安全密钥或风控页面仍会暂停，需要人工完成。

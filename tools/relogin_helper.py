@@ -58,6 +58,34 @@ def launch(data: dict) -> None:
     subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def auto_login(data: dict) -> None:
+    """Best-effort local UI fill; secrets never leave this process."""
+    launch(data)
+    time.sleep(4)
+    email = data.get("email", "")
+    password = data.get("password", "")
+    if not email or not password:
+        raise SystemExit("Keychain 中缺少邮箱或密码")
+    # Chrome login UI is intentionally driven locally through Accessibility.
+    # It may pause on Google risk checks; no server receives these values.
+    script = f'''tell application "Google Chrome" to activate
+tell application "System Events"
+  keystroke {json.dumps(email)}
+  key code 36
+  delay 2
+  keystroke {json.dumps(password)}
+  key code 36
+end tell'''
+    subprocess.run(["osascript", "-e", script], check=False)
+    if data.get("totp_secret"):
+        time.sleep(3)
+        script2 = f'''tell application "System Events"
+  keystroke {json.dumps(totp(data["totp_secret"]))}
+  key code 36
+end tell'''
+        subprocess.run(["osascript", "-e", script2], check=False)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="gemini2api 本机重登助手")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -72,6 +100,8 @@ def main() -> None:
     t.add_argument("account")
     l = sub.add_parser("launch", help="通过该账号代理启动 Chrome")
     l.add_argument("account")
+    a = sub.add_parser("auto", help="本机自动填写邮箱、密码和 TOTP")
+    a.add_argument("account")
     args = ap.parse_args()
     if args.cmd == "set":
         keychain_put(args.account, {"email": args.email, "password": args.password, "totp_secret": args.totp_secret, "proxy": args.proxy, "profile_dir": args.profile_dir})
@@ -85,6 +115,11 @@ def main() -> None:
         if not data:
             raise SystemExit("Keychain 中没有该账号")
         launch(data)
+    elif args.cmd == "auto":
+        data = keychain_get(args.account)
+        if not data:
+            raise SystemExit("Keychain 中没有该账号")
+        auto_login(data)
 
 
 if __name__ == "__main__":
