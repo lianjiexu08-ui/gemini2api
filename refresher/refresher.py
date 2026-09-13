@@ -567,19 +567,33 @@ def refresh_all():
                     )
                 else:
                     synced, notify_error = notify_gemini2api(account_id, result["psid"], result["psidts"])
-                    write_relogin_status(
-                        account_id,
-                        "completed" if synced else "failed",
-                        (
-                            "新 Cookie 已自动写回账号池"
-                            if result.get("cookie_changed")
-                            else "Cookie 未变化，但服务器确认当前会话仍有效"
-                        ) if synced else (
-                            "Cookie 未变化，服务器验证失败：" + notify_error
-                            if not result.get("cookie_changed")
-                            else "Cookie 已获取，但回写账号池失败：" + notify_error
-                        ),
-                    )
+                    if synced:
+                        write_relogin_status(
+                            account_id,
+                            "completed",
+                            (
+                                "新 Cookie 已自动写回账号池"
+                                if result.get("cookie_changed")
+                                else "Cookie 未变化，但服务器确认当前会话仍有效"
+                            ),
+                        )
+                    else:
+                        # 没有邮箱/密码时，Playwright 只能带旧 Cookie 打开 Gemini；
+                        # 旧会话被主服务拒绝后必须交给本机人工登录，而不是显示成普通失败。
+                        manual_needed = (
+                            not account.get("email")
+                            or "Cookie expired" in notify_error
+                            or "Google" in notify_error
+                        )
+                        write_relogin_status(
+                            account_id,
+                            "manual_required" if manual_needed else "failed",
+                            (
+                                "Cookie 已失效且账号未配置登录凭据，请在本机 Chrome 登录后，用捕获插件更新 Cookie"
+                                if manual_needed
+                                else "Cookie 已获取，但回写账号池失败：" + notify_error
+                            ),
+                        )
             if i < len(accounts) - 1:
                 time.sleep(5)
 
