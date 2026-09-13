@@ -329,6 +329,21 @@ def refresh_account(browser, account):
                 email_box.fill(account["email"])
                 page.get_by_role("button", name="Next").last.click()
                 time.sleep(5)
+                # Google 风控可能先给 reCAPTCHA；优先切换到可自动完成的
+                # 密码/Authenticator 验证方式，避免把旧 Cookie 当成登录成功。
+                try:
+                    alternate = page.get_by_text("Try another way", exact=True).last
+                    if alternate.count() and alternate.is_visible():
+                        alternate.click()
+                        time.sleep(3)
+                        for option in ("Enter your password", "Use your password", "Google Authenticator"):
+                            choice = page.get_by_text(option, exact=False).last
+                            if choice.count() and choice.is_visible():
+                                choice.click()
+                                time.sleep(4)
+                                break
+                except Exception:
+                    pass
                 try:
                     after_email_body = (page.locator("body").inner_text(timeout=5000) or "").lower()
                     write_relogin_status(
