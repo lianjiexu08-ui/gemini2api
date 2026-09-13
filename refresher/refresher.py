@@ -272,6 +272,18 @@ def refresh_account(browser, account):
                 code_box = page.locator('input[name="totpPin"], input[name="code"], input[type="tel"]').first
                 if code_box.count(): code_box.fill(code); page.get_by_role("button", name="Next").click(); time.sleep(8)
 
+        # 不能把登录页里残留的旧 Cookie 误判成新会话。没有凭据、密码错误、
+        # 2FA/风控未完成时，Playwright 仍可能带着旧 Cookie 返回。
+        if "accounts.google.com" in page.url:
+            print(f"  [{label}] FAILED - still on Google login page")
+            return {
+                "id": account_id,
+                "label": label,
+                "status": "expired",
+                "error": "仍停留在 Google 登录页，账号凭据或 2FA 未完成",
+                "updated_at": time.time(),
+            }
+
         cookies = context.cookies()
         psid = next((c["value"] for c in cookies if c["name"] == "__Secure-1PSID"), None)
         psidts = next((c["value"] for c in cookies if c["name"] == "__Secure-1PSIDTS"), None)
@@ -279,10 +291,18 @@ def refresh_account(browser, account):
         if psid and psidts:
             context.storage_state(path=state_file)
             print(f"  [{label}] OK - PSIDTS: {psidts[:20]}...")
-            return {"id": account_id, "label": label, "psid": psid, "psidts": psidts, "status": "active", "updated_at": time.time()}
+            return {
+                "id": account_id,
+                "label": label,
+                "psid": psid,
+                "psidts": psidts,
+                "cookie_changed": psid != account.get("psid") or psidts != account.get("psidts"),
+                "status": "active",
+                "updated_at": time.time(),
+            }
         else:
             print(f"  [{label}] FAILED - Cookie not found, may need re-login")
-            return {"id": account_id, "label": label, "status": "expired", "updated_at": time.time()}
+            return {"id": account_id, "label": label, "status": "expired", "error": "未获取到有效 Cookie", "updated_at": time.time()}
     except Exception as e:
         print(f"  [{label}] ERROR - {e}")
         return {"id": account_id, "label": label, "status": "error", "error": str(e), "updated_at": time.time()}
@@ -384,7 +404,10 @@ def refresh_all():
             try:
                 h = {"Authorization": f"Bearer {ADMIN_KEY}"} if ADMIN_KEY else {}
                 cr = http_requests.get(f"{GEMINI2API_URL}/admin/accounts/{account_id}/credentials", headers=h, timeout=10)
-                if cr.ok: account.update(cr.json())
+                if cr.ok:
+                    account.update(cr.json())
+                elif requested and cr.status_code == 404:
+                    write_relogin_status(account_id, "processing", "该账号未配置登录凭据，将检查现有 Cookie")
             except Exception as exc:
                 print(f"  [{account_id}] credential fetch skipped: {exc}")
             proxy = normalize_proxy(account.get("proxy"))
@@ -410,6 +433,28 @@ def refresh_all():
                 # 避免单个坏账号在每个周期阻塞整个账号池。
                 consume_relogin_request(account_id, pending_relogins)
             results.append(result)
+            # 手动点击的账号在本账号浏览器结束后立即回写，避免等待整轮账号
+            # 刷新和其它账号的 RotateCookies 请求，状态日志也能及时收敛。
+            if requested:
+                if result.get("status") != "active":
+                    write_relogin_status(
+                        account_id,
+                        "failed",
+                        result.get("error") or "未获取到有效 Cookie，可能需要检查账号凭据或 Google 验证",
+                    )
+                elif not result.get("cookie_changed"):
+                    write_relogin_status(
+                        account_id,
+                        "failed",
+                        "检测到的 Cookie 与旧值相同，未完成账号切换；请检查 authuser、账号凭据或 Google 验证",
+                    )
+                else:
+                    synced, notify_error = notify_gemini2api(account_id, result["psid"], result["psidts"])
+                    write_relogin_status(
+                        account_id,
+                        "completed" if synced else "failed",
+                        "新 Cookie 已自动写回账号池" if synced else f"Cookie 已获取，但回写账号池失败：{notify_error}",
+                    )
             if i < len(accounts) - 1:
                 time.sleep(5)
 
@@ -418,16 +463,11 @@ def refresh_all():
 
     active = [r for r in results if r.get("status") == "active"]
     for acc in active:
-        synced, notify_error = notify_gemini2api(acc["id"], acc["psid"], acc["psidts"])
-        if acc["id"] in pending_relogins:
-            write_relogin_status(
-                acc["id"],
-                "completed" if synced else "failed",
-                "新 Cookie 已自动写回账号池" if synced else f"Cookie 已获取，但回写账号池失败：{notify_error}",
-            )
-    for result in results:
-        if result.get("id") in pending_relogins and result.get("status") != "active":
-            write_relogin_status(result["id"], "failed", "未获取到有效 Cookie，可能需要检查账号凭据或 Google 验证")
+        # 定时续期只需要把真正变化的 Cookie 写回，避免旧 Cookie 反复触发
+        # RotateCookies 401/503；手动重登账号已在上面的即时分支处理。
+        if acc["id"] in pending_relogins or not acc.get("cookie_changed"):
+            continue
+        notify_gemini2api(acc["id"], acc["psid"], acc["psidts"])
 
     print(f"\n  Summary: {len(active)}/{len(results)} accounts active")
 
