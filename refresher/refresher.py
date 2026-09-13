@@ -382,7 +382,7 @@ def refresh_account(browser, account):
                 return {
                     "id": account_id,
                     "label": label,
-                    "status": "expired",
+                    "status": "manual_required",
                     "error": "Google 要求人工完成 reCAPTCHA/身份验证，服务器自动登录被拦截；请在本机 Chrome 完成一次验证后，用捕获插件更新该账号 Cookie",
                     "updated_at": time.time(),
                 }
@@ -562,7 +562,7 @@ def refresh_all():
                 if result.get("status") != "active":
                     write_relogin_status(
                         account_id,
-                        "failed",
+                        result.get("status") if result.get("status") == "manual_required" else "failed",
                         result.get("error") or "未获取到有效 Cookie，可能需要检查账号凭据或 Google 验证",
                     )
                 else:

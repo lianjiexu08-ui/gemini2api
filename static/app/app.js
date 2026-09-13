@@ -448,23 +448,62 @@ async function importProxies() {
 }
 
 const _reloginPollers = new Map();
+const _manualReloginWindows = new Map();
+const _manualReloginOpened = new Set();
+
+function openManualReloginWindow(accountId) {
+    let popup = null;
+    try {
+        popup = window.open('about:blank', `gemini2api-manual-${accountId}`, 'popup,width=520,height=760,resizable=yes,scrollbars=yes');
+        if (popup) {
+            popup.document.title = '等待 Google 验证';
+            popup.document.body.innerHTML = '<p style="font:16px sans-serif;padding:24px">等待服务器判断是否需要人工验证…</p>';
+        }
+    } catch (e) { /* 浏览器可能阻止弹窗，后续仍显示日志和登录链接 */ }
+    if (popup) _manualReloginWindows.set(accountId, popup);
+    return popup;
+}
+
+function manualReloginUrl(authuser) {
+    const target = `https://gemini.google.com/app${authuser && authuser !== '0' ? `?authuser=${encodeURIComponent(authuser)}` : ''}`;
+    return `https://accounts.google.com/v3/signin/identifier?authuser=${encodeURIComponent(authuser || '0')}&continue=${encodeURIComponent(target)}`;
+}
+
+function handleManualReloginRequired(status, options = {}) {
+    if (_manualReloginOpened.has(status.account_id)) return;
+    _manualReloginOpened.add(status.account_id);
+    const popup = options.manualWindow || _manualReloginWindows.get(status.account_id);
+    if (popup && !popup.closed) {
+        try { popup.location.href = manualReloginUrl(options.authuser || ''); } catch (e) { /* ignore closed popup */ }
+    } else {
+        const url = manualReloginUrl(options.authuser || '');
+        showToast(`Google 需要人工验证，请打开此登录页完成验证：${url}`, 'warning');
+    }
+    showToast('Google 需要人工验证，已打开处理窗口。完成后请点击捕获插件更新 Cookie。', 'warning');
+}
+
 function renderReloginStatus(status) {
     const el = document.querySelector(`[data-relogin-log="${CSS.escape(status.account_id)}"]`);
     if (!el) return;
     el.hidden = false;
-    const terminal = status.status === 'completed' || status.status === 'failed';
+    const terminal = ['completed', 'failed', 'manual_required'].includes(status.status);
     el.className = `relogin-log ${terminal ? status.status : 'processing'}`;
     const logs = (status.logs || []).map(item => `<div><time>${escapeHtml(item.time || '')}</time> ${escapeHtml(item.message || '')}</div>`).join('');
     el.innerHTML = `<strong>${escapeHtml(status.message || status.status || '重登中')}</strong><div class="relogin-log-lines">${logs}</div>`;
 }
-function pollReloginStatus(accountId) {
+function pollReloginStatus(accountId, options = {}) {
     if (_reloginPollers.has(accountId)) clearTimeout(_reloginPollers.get(accountId));
     const poll = async () => {
         try {
             const status = await apiCall('GET', `/admin/accounts/${encodeURIComponent(accountId)}/relogin/status`);
             renderReloginStatus(status);
-            if (status.status === 'completed' || status.status === 'failed') {
+            if (status.status === 'manual_required') handleManualReloginRequired(status, options);
+            if (['completed', 'failed', 'manual_required'].includes(status.status)) {
                 _reloginPollers.delete(accountId);
+                const popup = options.manualWindow || _manualReloginWindows.get(accountId);
+                if (popup && !popup.closed && status.status !== 'manual_required') {
+                    try { if (popup.location.href === 'about:blank') popup.close(); } catch (e) { /* ignore */ }
+                }
                 if (status.status === 'completed') setTimeout(() => loadAccounts(), 800);
                 return;
             }
@@ -573,13 +612,18 @@ async function loadAccounts() {
         container.querySelectorAll('.acc-relogin-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const accountId = btn.dataset.accountId;
+                const manualWindow = openManualReloginWindow(accountId);
+                _manualReloginOpened.delete(accountId);
                 btn.disabled = true;
                 apiCall('POST', `/admin/accounts/${accountId}/relogin`)
                     .then(() => {
-                        showToast('服务器已开始自动重登，详情显示在账号卡片下方', 'success');
-                        pollReloginStatus(accountId);
+                        showToast('服务器已开始自动重登；如遇 Google 验证会在此窗口交给你处理', 'success');
+                        pollReloginStatus(accountId, { manualWindow, authuser: btn.dataset.authuser || '' });
                     })
-                    .catch(() => showToast('服务器自动重登不可用，请检查 Playwright 刷新器', 'warning'))
+                    .catch(() => {
+                        if (manualWindow && !manualWindow.closed) manualWindow.close();
+                        showToast('服务器自动重登不可用，请检查 Playwright 刷新器', 'warning');
+                    })
                     .finally(() => { btn.disabled = false; });
             });
         });

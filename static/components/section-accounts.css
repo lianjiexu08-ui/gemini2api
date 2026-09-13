@@ -343,5 +343,6 @@
 .relogin-log.processing { border-color: var(--primary-color); }
 .relogin-log.completed { border-color: #20b486; }
 .relogin-log.failed { border-color: var(--danger-color, #e74c3c); }
+.relogin-log.manual_required { border-color: #d97706; background: #fff7ed; }
 .relogin-log-lines { margin-top: .35rem; color: var(--text-secondary); max-height: 110px; overflow-y: auto; }
 .relogin-log-lines time { display: inline-block; width: 3.8rem; color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
