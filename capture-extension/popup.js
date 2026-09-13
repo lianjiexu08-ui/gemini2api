@@ -144,7 +144,11 @@ $('confirm').addEventListener('click', async () => {
     try {
         const { server, adminKey } = await getCfg();
         const r = await api(server, adminKey, 'POST', '/admin/accounts', { cookie: pendingCookie });
-        showStatus(`✓ 已上号：${r.account.id}（标签自动获取中，稍后可见邮箱）`);
+        if (r.created === false) {
+            showStatus(`⚠ 该账号已存在：${r.account.id}，已更新凭据，未重复添加`, 'warn');
+        } else {
+            showStatus(`✓ 已上号：${r.account.id}（标签自动获取中，稍后可见邮箱）`);
+        }
         pendingCookie = null;
         $('confirm').classList.add('hidden');
     } catch (e) {
