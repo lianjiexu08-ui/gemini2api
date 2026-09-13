@@ -272,6 +272,48 @@ class TestAccountRequest(BaseModel):
     prompt: str = "Say ok"
 
 
+class PreviewAccountRequest(BaseModel):
+    """上号前预览：识别 Cookie 对应的真实 Google 账号（邮箱+指纹+是否已在池中）。"""
+
+    cookie: Optional[str] = None
+    psid: Optional[str] = None
+    psidts: str = ""
+
+
+@router.post("/accounts/preview")
+async def preview_account(req: PreviewAccountRequest):
+    """干跑验证：不起号入池，只回答「这段 Cookie 是谁」。"""
+    psid, psidts = _resolve_credentials(req.psid, req.psidts, req.cookie)
+    if not psid:
+        return JSONResponse(
+            status_code=400,
+            content={"error": {"message": "psid is required: provide psid or a cookie string containing __Secure-1PSID", "type": "invalid_request"}},
+        )
+    duplicate = next((a for a in account_pool.accounts if a.psid == psid), None)
+    from app.core.gemini_client import GeminiWebClient
+
+    client = GeminiWebClient(psid=psid, psidts=psidts)
+    try:
+        await asyncio.wait_for(client.initialize(), timeout=30)
+        valid = bool(getattr(client, "_session_token", ""))
+        email = await asyncio.wait_for(client.get_account_email(), timeout=20)
+    except Exception:
+        valid = False
+        email = ""
+    finally:
+        try:
+            await client.shutdown()
+        except Exception:
+            pass
+    return {
+        "valid": valid,
+        "email": email,
+        "psid_suffix": psid[-12:],
+        "duplicate_of": duplicate.id if duplicate else None,
+        "in_pool_count": sum(1 for a in account_pool.accounts if a.psid == psid),
+    }
+
+
 @router.post("/accounts/{account_id}/test")
 async def test_account_generation(account_id: str, req: TestAccountRequest):
     """对指定账号发起真实生成测试（自定义模型/Prompt），返回耗时与结果摘要。"""

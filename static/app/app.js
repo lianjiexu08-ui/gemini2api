@@ -525,6 +525,51 @@ function openAddAccountModal() {
     if (modal) modal.classList.add('active');
 }
 
+// ============================================================================
+// Add Account Cookie Preview（粘贴后自动「验明正身」）
+// ============================================================================
+
+let _previewTimer = null;
+
+function _renderAddPreview(text, isError, isWarn) {
+    const el = document.getElementById('add-preview');
+    if (!el) return;
+    el.textContent = text || '';
+    el.style.color = isError ? 'var(--danger, #e74c3c)' : (isWarn ? 'var(--warning, #e67e22)' : '');
+}
+
+async function _runAddPreview() {
+    const cookie = document.getElementById('add-cookie')?.value.trim() || '';
+    const psid = document.getElementById('add-psid')?.value.trim() || '';
+    const psidts = document.getElementById('add-psidts')?.value.trim() || '';
+    if (!cookie && !psid) {
+        _renderAddPreview('');
+        return;
+    }
+    _renderAddPreview(t('accounts.previewChecking'));
+    try {
+        const payload = cookie ? { cookie } : { psid, psidts };
+        const r = await apiCall('POST', '/admin/accounts/preview', payload);
+        if (!r.valid) {
+            _renderAddPreview(`✗ ${t('accounts.previewFailed')}`, true);
+            return;
+        }
+        const who = r.email ? `${r.email}` : `psid…${r.psid_suffix}`;
+        if (r.duplicate_of) {
+            _renderAddPreview(`→ ${who} ⚠ ${t('accounts.previewDuplicate')}: ${r.duplicate_of}`, false, true);
+        } else {
+            _renderAddPreview(`→ ${who}`);
+        }
+    } catch (e) {
+        _renderAddPreview('');  // 预览失败静默，不阻碍上号
+    }
+}
+
+function _scheduleAddPreview() {
+    if (_previewTimer) clearTimeout(_previewTimer);
+    _previewTimer = setTimeout(_runAddPreview, 600);
+}
+
 function closeAddAccountModal() {
     const modal = document.getElementById('addAccountModal');
     if (modal) {
@@ -532,6 +577,7 @@ function closeAddAccountModal() {
         const inputs = modal.querySelectorAll('input, textarea');
         inputs.forEach(input => { input.value = ''; });
     }
+    _renderAddPreview('');
 }
 
 async function submitAddAccount() {
@@ -1396,6 +1442,11 @@ function initEventListeners() {
         });
         addModal.addEventListener('click', (e) => {
             if (e.target === addModal) closeAddAccountModal();
+        });
+        // Cookie/凭据输入时自动预览「这段 Cookie 是谁」
+        ['add-cookie', 'add-psid', 'add-psidts'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('input', _scheduleAddPreview);
         });
     }
 
