@@ -259,6 +259,15 @@ def refresh_account(browser, account):
         locale="en-US",
         timezone_id="America/New_York",
     )
+    # Google 会拒绝标准 headless/Playwright 指纹。刷新器在 xvfb 虚拟显示器中
+    # 以 headful Chromium 运行，并隐藏最明显的自动化属性，保持服务器端无人值守。
+    context.add_init_script(
+        """
+        Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+        Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
+        Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+        """
+    )
     page = context.new_page()
 
     try:
@@ -475,9 +484,8 @@ def refresh_all():
                 "--disable-setuid-sandbox",
                 "--disable-gpu",
                 "--disable-dev-shm-usage",
-                "--single-process",
-                "--no-zygote",
-                "--disable-extensions",
+                "--disable-blink-features=AutomationControlled",
+                "--window-size=1920,1080",
             ]
 
         processed_ids = set()
@@ -511,7 +519,7 @@ def refresh_all():
                 write_relogin_status(account_id, "processing", "凭据已读取，正在通过账号代理打开登录页")
             browser = None
             try:
-                browser = p.chromium.launch(headless=True, proxy=playwright_proxy(proxy), args=launch_args)
+                browser = p.chromium.launch(headless=False, proxy=playwright_proxy(proxy), args=launch_args)
                 if requested:
                     write_relogin_status(account_id, "processing", "浏览器已启动，正在登录并获取 Cookie")
                 result = refresh_account(browser, account)
