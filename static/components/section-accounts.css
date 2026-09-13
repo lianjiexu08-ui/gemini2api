@@ -304,3 +304,22 @@
 [data-theme="dark"] .modal-content {
     background: var(--bg-primary);
 }
+
+/* 自动重登配置分组：在账号新增/更新弹窗中与 Cookie 字段清晰区分 */
+.credential-fields {
+    margin: 18px 0 4px;
+    padding: 14px 16px 8px;
+    border: 1px solid var(--border-color, #e2e8f0);
+    border-radius: 10px;
+}
+.credential-fields legend {
+    padding: 0 8px;
+    font-size: .9rem;
+    font-weight: 600;
+    color: var(--text-primary, #334155);
+}
+.credential-fields .text-muted {
+    margin: 8px 0 4px;
+    font-size: .82rem;
+    line-height: 1.5;
+}

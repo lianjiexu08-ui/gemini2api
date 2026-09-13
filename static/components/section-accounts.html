@@ -1,4 +1,4 @@
-<link rel="stylesheet" href="components/section-accounts.css?v=4">
+<link rel="stylesheet" href="components/section-accounts.css?v=5">
 <!-- Accounts Section -->
 <section id="accounts" class="section" aria-labelledby="accounts-title">
     <div class="section-header">
@@ -38,6 +38,34 @@
                 <label for="add-label" data-i18n="accounts.labelName">标签名称</label>
                 <input type="text" id="add-label" class="form-control" data-i18n-placeholder="accounts.labelPlaceholder" placeholder="留空自动获取邮箱，或自定义">
             </div>
+            <fieldset class="credential-fields">
+                <legend>自动重登配置（可选）</legend>
+                <div class="form-group">
+                    <label for="add-email">Google 邮箱</label>
+                    <input type="email" id="add-email" class="form-control" autocomplete="off" placeholder="name@gmail.com">
+                </div>
+                <div class="form-group">
+                    <label for="add-password">Google 密码</label>
+                    <input type="password" id="add-password" class="form-control" autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                    <label for="add-totp">2FA/TOTP 密钥</label>
+                    <input type="password" id="add-totp" class="form-control" autocomplete="new-password" placeholder="例如 XEWM...（Base32）">
+                </div>
+                <div class="form-group">
+                    <label for="add-totp-url">第三方 2FA 地址（可选）</label>
+                    <input type="url" id="add-totp-url" class="form-control" placeholder="https://2fa.example.com/code">
+                </div>
+                <div class="form-group">
+                    <label for="add-totp-key">第三方 2FA 密钥（可选）</label>
+                    <input type="password" id="add-totp-key" class="form-control" autocomplete="new-password">
+                </div>
+                <div class="form-group">
+                    <label for="add-proxy">该账号代理（可选）</label>
+                    <input type="text" id="add-proxy" class="form-control" placeholder="http://user:pass@host:port 或 socks5://host:port">
+                </div>
+                <p class="text-muted">保存后凭据会加密存储在服务器，点击账号卡片的“重登”即可自动尝试登录。</p>
+            </fieldset>
             <div class="form-group">
                 <label for="add-psid">__Secure-1PSID <span class="required">*</span></label>
                 <input type="text" id="add-psid" class="form-control" data-i18n-placeholder="accounts.psidPlaceholder" placeholder="输入 __Secure-1PSID（或粘贴上方完整 Cookie）">
@@ -108,13 +136,13 @@
 <div id="updateCookieModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="updateCookieTitle">
     <div class="modal-content">
         <div class="modal-header">
-            <h3 id="updateCookieTitle" data-i18n="accounts.updateCookie">更新 Cookie</h3>
+            <h3 id="updateCookieTitle" data-i18n="accounts.updateCookie">登录配置 / Cookie</h3>
             <button class="modal-close" aria-label="Close">
                 <i class="fas fa-times"></i>
             </button>
         </div>
         <div class="modal-body">
-            <p class="text-muted">点击“重登”后，在打开的 Gemini 页面登录该账号，再用上号助手重新捕获 Cookie。</p>
+            <p class="text-muted">点击“重登”后，服务器 Playwright 会使用此账号保存的凭据和代理自动登录并刷新会话；如果触发手机确认或安全密钥，请按 Google 页面提示完成验证。</p>
             <div class="form-group">
                 <label for="update-cookie" data-i18n="accounts.orPasteCookie">或直接粘贴完整 Cookie（自动解析）</label>
                 <textarea id="update-cookie" class="form-control" rows="3" data-i18n-placeholder="accounts.cookiePlaceholder" placeholder="__Secure-1PSID=...; __Secure-1PSIDTS=..."></textarea>
@@ -131,8 +159,10 @@
                 <label for="update-proxy">代理地址（可选）</label>
                 <input type="text" id="update-proxy" class="form-control" placeholder="http://user:pass@host:port 或 socks5://host:port">
             </div>
-            <div class="form-group">
-                <label for="update-email">自动重登邮箱（可选）</label>
+            <fieldset class="credential-fields">
+                <legend>自动重登配置</legend>
+                <div class="form-group">
+                <label for="update-email">Google 邮箱</label>
                 <input type="email" id="update-email" class="form-control" autocomplete="off">
             </div>
             <div class="form-group">
@@ -151,6 +181,7 @@
                 <label for="update-totp-key">第三方 2FA 密钥（可选）</label>
                 <input type="password" id="update-totp-key" class="form-control" autocomplete="new-password">
             </div>
+            </fieldset>
         </div>
         <div class="modal-footer">
             <button class="btn btn-secondary modal-cancel" data-i18n="confirm.cancel">取消</button>

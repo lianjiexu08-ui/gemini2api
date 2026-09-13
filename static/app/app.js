@@ -455,7 +455,7 @@ async function loadAccounts() {
                         <i class="fas fa-edit"></i> ${t('accounts.editLabel')}
                     </button>
                     <button class="btn btn-sm btn-outline acc-cookie-btn" data-account-id="${idEsc}" data-account-label="${labelEsc}">
-                        <i class="fas fa-cookie-bite"></i> ${t('accounts.updateCookie')}
+                        <i class="fas fa-key"></i> 登录配置 / Cookie
                     </button>
                     <button class="btn btn-sm btn-outline acc-relogin-btn" data-account-id="${idEsc}" data-authuser="${escapeAttr(account.authuser || '')}">
                         <i class="fas fa-right-to-bracket"></i> ${t('accounts.relogin')}
@@ -556,7 +556,7 @@ async function _runAddPreview() {
     const cookie = document.getElementById('add-cookie')?.value.trim() || '';
     const psid = document.getElementById('add-psid')?.value.trim() || '';
     const psidts = document.getElementById('add-psidts')?.value.trim() || '';
-    if (!cookie && !psid && !(email && password)) {
+    if (!cookie && !psid) {
         _renderAddPreview('');
         return;
     }
@@ -599,6 +599,12 @@ async function submitAddAccount() {
     const psid = document.getElementById('add-psid')?.value.trim();
     const psidts = document.getElementById('add-psidts')?.value.trim() || '';
     const label = document.getElementById('add-label')?.value.trim() || '';
+    const email = document.getElementById('add-email')?.value.trim() || '';
+    const password = document.getElementById('add-password')?.value || '';
+    const totp_secret = document.getElementById('add-totp')?.value || '';
+    const totp_url = document.getElementById('add-totp-url')?.value.trim() || '';
+    const totp_key = document.getElementById('add-totp-key')?.value || '';
+    const proxy = document.getElementById('add-proxy')?.value.trim() || '';
 
     if (!cookie && !psid) {
         showToast('请粘贴完整 Cookie 或填写 __Secure-1PSID', 'warning');
@@ -608,8 +614,13 @@ async function submitAddAccount() {
     try {
         showToast(t('accounts.adding'), 'info');
         // 整段 Cookie 优先，服务端自动解析 __Secure-1PSID / __Secure-1PSIDTS
-        const payload = cookie ? { cookie, label } : { psid, psidts, label };
-        await apiCall('POST', '/admin/accounts', payload);
+        const payload = cookie ? { cookie, label, proxy: proxy || null } : { psid, psidts, label, proxy: proxy || null };
+        const created = await apiCall('POST', '/admin/accounts', payload);
+        const accountId = created?.account?.id;
+        if (email || password || totp_secret || totp_url || totp_key) {
+            if (!email || !password || !accountId) throw new Error('自动重登配置需要同时填写邮箱和密码');
+            await apiCall('PUT', `/admin/accounts/${accountId}/credentials`, { email, password, totp_secret: totp_secret || null, totp_url: totp_url || null, totp_key: totp_key || null, proxy: proxy || null });
+        }
         showToast(t('accounts.added'), 'success');
         closeAddAccountModal();
         await loadAccounts();
@@ -826,7 +837,7 @@ function openUpdateCookieModal(accountId, label) {
     updateCookieAccountId = accountId;
     const modal = document.getElementById('updateCookieModal');
     const title = document.getElementById('updateCookieTitle');
-    if (title) title.textContent = `更新 Cookie - ${label || accountId}`;
+    if (title) title.textContent = `登录配置 / Cookie - ${label || accountId}`;
     if (modal) modal.classList.add('active');
 }
 
@@ -851,8 +862,12 @@ async function submitUpdateCookie() {
     const totp_url = document.getElementById('update-totp-url')?.value.trim() || '';
     const totp_key = document.getElementById('update-totp-key')?.value || '';
 
-    if (!cookie && !psid) {
-        showToast('请粘贴完整 Cookie 或填写 __Secure-1PSID', 'warning');
+    if ((!cookie && !psid) && !(email && password)) {
+        showToast('请填写 Cookie，或同时填写自动重登邮箱和密码', 'warning');
+        return;
+    }
+    if ((email && !password) || (!email && password)) {
+        showToast('自动重登配置需要同时填写邮箱和密码', 'warning');
         return;
     }
 
@@ -870,7 +885,7 @@ async function submitUpdateCookie() {
         if (email && password) {
             await apiCall('PUT', `/admin/accounts/${updateCookieAccountId}/credentials`, { email, password, totp_secret: totp_secret || null, totp_url: totp_url || null, totp_key: totp_key || null, proxy: proxy || null });
         }
-        showToast('Cookie 更新成功', 'success');
+        showToast(email && password ? '登录配置已保存' : 'Cookie 更新成功', 'success');
         closeUpdateCookieModal();
         await loadAccounts();
         await loadDashboard();
