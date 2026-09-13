@@ -645,8 +645,7 @@ async function submitTestAccount() {
 async function testAllAccounts() {
     const model = document.getElementById('test-model')?.value || 'gemini-pro';
     const prompt = document.getElementById('test-prompt')?.value.trim() || 'Say ok';
-    const btn = document.getElementById('confirmTestAccount');
-    if (btn) btn.disabled = true;
+    _setTestButtonsDisabled(true);
     try {
         const data = await apiCall('GET', '/admin/accounts');
         const accounts = data.accounts || [];
@@ -667,8 +666,47 @@ async function testAllAccounts() {
     } catch (error) {
         _renderTestResult(`✗ ${error.message}`, true);
     } finally {
-        if (btn) btn.disabled = false;
+        _setTestButtonsDisabled(false);
     }
+}
+
+async function testAllModels() {
+    if (!testAccountId) return;
+    const prompt = document.getElementById('test-prompt')?.value.trim() || 'Say ok';
+    const select = document.getElementById('test-model');
+    const models = select ? Array.from(select.options).map(o => o.value) : [];
+    if (!models.length) {
+        _renderTestResult('✗ no models available', true);
+        return;
+    }
+    _setTestButtonsDisabled(true);
+    const lines = [];
+    try {
+        for (const m of models) {
+            lines.push(`${m} ...`);
+            _renderTestResult(lines.join('\n'), false);
+            const start = Date.now();
+            try {
+                const r = await apiCall('POST', `/admin/accounts/${testAccountId}/test`, { model: m, prompt });
+                const elapsed = Date.now() - start;
+                lines[lines.length - 1] = r.success
+                    ? `${m}: ✓ ${r.latency_ms}ms`
+                    : `${m}: ✗ ${r.error || 'unknown'}`;
+            } catch (e) {
+                lines[lines.length - 1] = `${m}: ✗ ${e.message}`;
+            }
+            _renderTestResult(lines.join('\n'), false);
+        }
+    } finally {
+        _setTestButtonsDisabled(false);
+    }
+}
+
+function _setTestButtonsDisabled(disabled) {
+    ['confirmTestAccount', 'testAllModelsBtn'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.disabled = disabled;
+    });
 }
 
 // ============================================================================
@@ -1421,9 +1459,17 @@ function initEventListeners() {
             if (promptInput && !promptInput.value) promptInput.value = 'Say ok';
             const result = document.getElementById('test-result');
             if (result) { result.style.display = 'none'; result.textContent = ''; }
+            const allModelsBtn = document.getElementById('testAllModelsBtn');
+            if (allModelsBtn) allModelsBtn.style.display = 'none';  // 全账号模式：隐藏「测试所有模型」
             _loadTestModels('gemini-pro');
             if (modal) modal.classList.add('active');
         });
+    }
+
+    // Test all models button（单账号测试模式）
+    const testAllModelsBtn = document.getElementById('testAllModelsBtn');
+    if (testAllModelsBtn) {
+        testAllModelsBtn.addEventListener('click', testAllModels);
     }
 
     // Playground send
