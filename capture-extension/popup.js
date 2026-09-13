@@ -28,12 +28,32 @@ async function api(server, key, method, path, body) {
     return data;
 }
 
+async function loadStores() {
+    try {
+        const stores = await chrome.cookies.getAllCookieStores();
+        const sel = $('store');
+        if (!sel) return;
+        sel.innerHTML = '';
+        for (const s of stores) {
+            const opt = document.createElement('option');
+            opt.value = s.id;
+            opt.textContent = s.id === '0' ? '🔓 正常窗口（默认账号）' : '🕶️ 无痕窗口（推荐多账号用）';
+            sel.appendChild(opt);
+        }
+        // 有无痕窗口开着时出现来源选择
+        $('storeRow').classList.toggle('hidden', stores.length <= 1);
+    } catch (e) {
+        // 老内核没有该 API 时静默降级
+    }
+}
+
 function refreshUI() {
     getCfg().then(({ server, adminKey }) => {
         const ok = server && adminKey;
         $('config').classList.toggle('hidden', !!ok);
         $('capture').classList.toggle('hidden', !ok);
         if (server) $('server').value = server;
+        loadStores();
     });
 }
 
@@ -47,7 +67,7 @@ $('capture').addEventListener('click', async () => {
     pendingCookie = null;
     $('confirm').classList.add('hidden');
     try {
-        const cookies = await chrome.cookies.getAll({ domain: '.google.com' });
+        const cookies = await chrome.cookies.getAll({ domain: '.google.com', storeId: $('store')?.value || undefined });
         const byName = {};
         for (const c of cookies) {
             if (c.name === '__Secure-1PSID' || c.name === '__Secure-1PSIDTS') {

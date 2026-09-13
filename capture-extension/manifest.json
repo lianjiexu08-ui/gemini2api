@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "description": "一键捕获当前 Gemini 网页会话 Cookie 并上号到 gemini2api 号池",
   "permissions": ["cookies", "storage"],
+  "incognito": "split",
   "host_permissions": [
     "https://*.google.com/*",
     "http://*/*",

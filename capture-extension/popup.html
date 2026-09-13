@@ -30,11 +30,17 @@
   </div>
 
   <button id="capture" class="primary hidden">捕获当前 Gemini 会话</button>
+  <div id="storeRow" class="hidden" style="margin-top:8px">
+    <label>Cookie 来源窗口</label>
+    <select id="store" class="form-control"></select>
+  </div>
   <button id="confirm" class="success hidden">确认上号</button>
   <div id="status" class="hidden"></div>
 
-  <div class="tip">用法：先在 gemini.google.com 右上角头像<b>切换到目标账号</b>，再点「捕获」。
-  插件读取的是当前默认账号的登录态（头像切到谁就是谁）。</div>
+  <div class="tip"><b>多账号必读</b>：<code>__Secure-1PSID</code> 永远属于该浏览器 Profile 的<b>默认账号</b>
+  （第一个登录的号），网页右上角切头像不会改变它！<br>
+  推荐：每个车位用独立无痕窗口登录 → 保持窗口不关 → 插件里选「无痕窗口」捕获。<br>
+  长期方案：给每个车位建独立 Chrome Profile（独立 Cookie 罐，天然无串号）。</div>
 
   <script src="popup.js"></script>
 </body>
