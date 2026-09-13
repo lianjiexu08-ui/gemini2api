@@ -395,8 +395,17 @@ def refresh_all():
                 "--disable-extensions",
             ]
 
-        for i, account in enumerate(accounts):
+        processed_ids = set()
+        for i in range(len(accounts)):
+            # 刷新一轮期间也持续读取队列。这样用户在整轮刷新开始后点击
+            # “重登”，不会被迫等待剩余账号全部跑完才开始处理。
+            pending_now = load_relogin_requests()
+            pending_relogins.update(pending_now)
+            remaining = [a for a in accounts if a.get("id") not in processed_ids]
+            requested_accounts = [a for a in remaining if a.get("id") in pending_now]
+            account = (requested_accounts or remaining)[0]
             account_id = account.get("id")
+            processed_ids.add(account_id)
             requested = account_id in pending_relogins
             if requested:
                 write_relogin_status(account_id, "processing", "正在启动 Playwright 浏览器")
