@@ -1,13 +1,15 @@
 {
   "manifest_version": 3,
   "name": "gemini2api 上号助手",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "在同一 Chrome Profile 中按当前 Google authuser 捕获 Gemini 会话",
   "permissions": [
-    "cookies",
-    "storage",
     "activeTab",
-    "scripting"
+    "alarms",
+    "cookies",
+    "scripting",
+    "storage",
+    "tabs"
   ],
   "incognito": "split",
   "host_permissions": [
@@ -18,5 +20,8 @@
   "action": {
     "default_popup": "popup.html",
     "default_title": "gemini2api 上号助手"
+  },
+  "background": {
+    "service_worker": "relogin_bridge.js"
   }
 }
