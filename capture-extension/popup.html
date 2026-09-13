@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<style>
+  body { width: 340px; font-family: system-ui, sans-serif; margin: 0; padding: 12px; font-size: 13px; }
+  h3 { margin: 0 0 10px; font-size: 14px; }
+  label { display: block; margin: 8px 0 2px; color: #666; }
+  input { width: 100%; box-sizing: border-box; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px; }
+  button { margin-top: 10px; padding: 8px 12px; border: none; border-radius: 6px; cursor: pointer; width: 100%; }
+  .primary { background: #1a73e8; color: #fff; }
+  .primary:disabled { background: #9fc1f0; cursor: not-allowed; }
+  .success { background: #188038; color: #fff; }
+  .hidden { display: none; }
+  #status { margin-top: 10px; padding: 8px; border-radius: 6px; background: #f1f3f4; white-space: pre-wrap; word-break: break-all; }
+  #status.err { background: #fce8e6; color: #c5221f; }
+  #status.warn { background: #feefc3; color: #b06000; }
+  .tip { color: #888; font-size: 12px; margin-top: 8px; line-height: 1.5; }
+</style>
+</head>
+<body>
+  <h3>gemini2api 上号助手</h3>
+
+  <div id="config">
+    <label>gemini2api 地址</label>
+    <input id="server" placeholder="http://154.21.193.37:5918">
+    <label>Admin Key</label>
+    <input id="adminKey" type="password" placeholder="ad2b7e1e1f75...">
+    <button id="save" class="primary">保存配置</button>
+  </div>
+
+  <button id="capture" class="primary hidden">捕获当前 Gemini 会话</button>
+  <button id="confirm" class="success hidden">确认上号</button>
+  <div id="status" class="hidden"></div>
+
+  <div class="tip">用法：先在 gemini.google.com 右上角头像<b>切换到目标账号</b>，再点「捕获」。
+  插件读取的是当前默认账号的登录态（头像切到谁就是谁）。</div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
