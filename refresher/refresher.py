@@ -12,7 +12,6 @@ import time
 import base64
 import hashlib
 import hmac
-import re
 from urllib.parse import quote, unquote, urlsplit
 import requests as http_requests
 from playwright.sync_api import sync_playwright
@@ -300,7 +299,6 @@ def refresh_account(browser, account):
             except Exception:
                 visible_buttons = []
             body_lower = (page.locator("body").inner_text(timeout=5000) or "").lower()
-            safe_body = re.sub(r"[\w.+-]+@[\w.-]+", "[email]", body_lower)
             probe = (
                 f"Google 页面探测：url={page.url[:140]} title={page.title()[:60]} "
                 f"email框={email_inputs} 密码框={password_inputs} "
@@ -310,12 +308,8 @@ def refresh_account(browser, account):
                 f"use_other:{'use another account' in body_lower},"
                 f"verify:{'verify' in body_lower},"
                 f"password:{'password' in body_lower},"
-                f"try_again:{'try again' in body_lower},文本={safe_body[:160]}"
+                f"try_again:{'try again' in body_lower}"
             )
-            try:
-                page.screenshot(path=os.path.join(DATA_DIR, f"relogin_debug_{account_id}.png"), full_page=True)
-            except Exception:
-                pass
             write_relogin_status(account_id, "processing", probe)
             print(
                 f"  [{label}] Login probe: url={page.url[:120]} "
@@ -362,10 +356,6 @@ def refresh_account(browser, account):
                             ) if needle in after_email_body
                         ),
                     )
-                    try:
-                        page.screenshot(path=os.path.join(DATA_DIR, f"relogin_debug_{account_id}_after_email.png"), full_page=True)
-                    except Exception:
-                        pass
                 except Exception:
                     pass
             try:
@@ -383,6 +373,19 @@ def refresh_account(browser, account):
         # 不能把登录页里残留的旧 Cookie 误判成新会话。没有凭据、密码错误、
         # 2FA/风控未完成时，Playwright 仍可能带着旧 Cookie 返回。
         if "accounts.google.com" in page.url:
+            body = (page.locator("body").inner_text(timeout=5000) or "").lower()
+            if any(marker in body for marker in (
+                "couldn’t sign you in", "couldn't sign you in",
+                "couldn't verify this account", "verify it's you",
+                "confirm you're not a robot", "recaptcha",
+            )):
+                return {
+                    "id": account_id,
+                    "label": label,
+                    "status": "expired",
+                    "error": "Google 要求人工完成 reCAPTCHA/身份验证，服务器自动登录被拦截",
+                    "updated_at": time.time(),
+                }
             print(f"  [{label}] FAILED - still on Google login page")
             return {
                 "id": account_id,
