@@ -20,4 +20,4 @@ USER pwuser
 HEALTHCHECK --interval=60s --timeout=10s --start-period=30s --retries=3 \
     CMD pgrep -f refresher.py >/dev/null || exit 1
 
-CMD ["xvfb-run", "-a", "--server-args=-screen 0 1920x1080x24", "python", "refresher.py"]
+CMD ["sh", "-c", "Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp & sleep 1; export DISPLAY=:99; exec python -u refresher.py"]
