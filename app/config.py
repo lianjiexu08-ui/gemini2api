@@ -71,6 +71,8 @@ class Settings(BaseSettings):
     # 管理面板/admin 路由的独立访问密钥。默认空 → 回退到 api_key（保持单 key 全功能的原行为，零回归）。
     # 设置非空后，/admin/* 改用该 key 校验，业务 API 仍用 api_key，实现权限分离。
     admin_api_key: str = ""
+    credentials_encryption_key: str = ""
+    credentials_file: str = "data/credentials.enc"
     # CORS 可配置（默认保持原行为：允许所有来源 + 允许凭据）。多个来源用英文逗号分隔；"*" 表示全部。
     cors_allow_origins: str = "*"
     cors_allow_credentials: bool = True

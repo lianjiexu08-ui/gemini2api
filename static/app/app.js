@@ -553,7 +553,7 @@ async function _runAddPreview() {
     const cookie = document.getElementById('add-cookie')?.value.trim() || '';
     const psid = document.getElementById('add-psid')?.value.trim() || '';
     const psidts = document.getElementById('add-psidts')?.value.trim() || '';
-    if (!cookie && !psid) {
+    if (!cookie && !psid && !(email && password)) {
         _renderAddPreview('');
         return;
     }
@@ -842,6 +842,9 @@ async function submitUpdateCookie() {
     const psid = document.getElementById('update-psid')?.value.trim();
     const psidts = document.getElementById('update-psidts')?.value.trim() || '';
     const proxy = document.getElementById('update-proxy')?.value.trim() || '';
+    const email = document.getElementById('update-email')?.value.trim() || '';
+    const password = document.getElementById('update-password')?.value || '';
+    const totp_secret = document.getElementById('update-totp')?.value || '';
 
     if (!cookie && !psid) {
         showToast('请粘贴完整 Cookie 或填写 __Secure-1PSID', 'warning');
@@ -858,7 +861,10 @@ async function submitUpdateCookie() {
         // 整段 Cookie 优先，服务端自动解析
         const payload = cookie ? { cookie } : { psid, psidts };
         if (proxy) payload.proxy = proxy;
-        await apiCall('PUT', `/admin/accounts/${updateCookieAccountId}/cookies`, payload);
+        if (cookie || psid) await apiCall('PUT', `/admin/accounts/${updateCookieAccountId}/cookies`, payload);
+        if (email && password) {
+            await apiCall('PUT', `/admin/accounts/${updateCookieAccountId}/credentials`, { email, password, totp_secret: totp_secret || null, proxy: proxy || null });
+        }
         showToast('Cookie 更新成功', 'success');
         closeUpdateCookieModal();
         await loadAccounts();

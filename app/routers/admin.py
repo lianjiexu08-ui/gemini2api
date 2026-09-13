@@ -280,6 +280,13 @@ class TestAccountRequest(BaseModel):
     prompt: str = "Say ok"
 
 
+class CredentialsRequest(BaseModel):
+    email: str
+    password: str
+    totp_secret: Optional[str] = None
+    proxy: Optional[str] = None
+
+
 class PreviewAccountRequest(BaseModel):
     """上号前预览：识别 Cookie 对应的真实 Google 账号（邮箱+指纹+是否已在池中）。"""
 
@@ -349,6 +356,28 @@ async def test_account_generation(account_id: str, req: TestAccountRequest):
             content={"error": {"message": f"Account {account_id} not found", "type": "not_found"}},
         )
     return result
+
+
+@router.put("/accounts/{account_id}/credentials")
+async def update_account_credentials(account_id: str, req: CredentialsRequest):
+    if not any(a.id == account_id for a in account_pool.accounts):
+        return JSONResponse(status_code=404, content={"error": {"message": f"Account {account_id} not found", "type": "not_found"}})
+    from app.core import credential_vault
+    try:
+        credential_vault.put(account_id, {"email": req.email.strip(), "password": req.password, "totp_secret": req.totp_secret, "proxy": req.proxy})
+    except RuntimeError as exc:
+        return JSONResponse(status_code=503, content={"error": {"message": str(exc), "type": "vault_not_configured"}})
+    return {"status": "ok", "message": "credentials stored encrypted"}
+
+
+@router.delete("/accounts/{account_id}/credentials")
+async def delete_account_credentials(account_id: str):
+    from app.core import credential_vault
+    try:
+        credential_vault.delete(account_id)
+    except RuntimeError as exc:
+        return JSONResponse(status_code=503, content={"error": {"message": str(exc), "type": "vault_not_configured"}})
+    return {"status": "ok"}
 
 
 @router.patch("/accounts/{account_id}")

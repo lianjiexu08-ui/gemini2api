@@ -8,3 +8,4 @@ sse-starlette==2.3.3
 slowapi==0.1.9
 httpx==0.27.0
 psutil==6.1.1
+cryptography>=42.0.0
