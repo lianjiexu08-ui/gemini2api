@@ -574,21 +574,39 @@ class AccountPool:
                 return a
         return available[0]
 
-    async def add_account(self, psid: str, psidts: str, label: str = "") -> Account:
+    async def add_account(
+        self, psid: str, psidts: str, label: str = ""
+    ) -> tuple[Account, bool]:
+        """上号。同 PSID 已存在时转为「续命」：更新凭据 + 清毒罐 + 热重载 client，
+        返回 (账号, False)；新号正常入池返回 (账号, True)。
+        幂等重上避免了旧实现重复入池（同号两条、配额浪费、风控翻倍）。"""
+        norm_psid = psid.strip().strip('"').strip("'").rstrip(";")
+        norm_psidts = psidts.strip().strip('"').strip("'").rstrip(";")
+        for a in self._accounts:
+            if a.psid == norm_psid:
+                a.psidts = norm_psidts or a.psidts
+                if label and label != a.label:
+                    a.label = label
+                self._save_to_file()
+                if a.client:
+                    await a.client.reload_cookies(a.psid, a.psidts)
+                logger.info(f"Account {a.id} re-supplied with fresh credentials (jar wiped)")
+                return a, False
+
         # 用单调计数器生成 id，删除中间账号后也绝不撞号（不再用易撞号的 len()）。
         self._sync_id_seq()
         account_id = f"account-{self._next_id_seq}"
         self._next_id_seq += 1
         account = Account(
             id=account_id,
-            psid=psid.strip().strip('"').strip("'").rstrip(";"),
-            psidts=psidts.strip().strip('"').strip("'").rstrip(";"),
+            psid=norm_psid,
+            psidts=norm_psidts,
             label=label or account_id,
         )
         await self._init_account_client(account)
         self._accounts.append(account)
         self._save_to_file()
-        return account
+        return account, True
 
     async def remove_account(self, account_id: str) -> bool:
         for i, account in enumerate(self._accounts):

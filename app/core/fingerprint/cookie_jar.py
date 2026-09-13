@@ -228,6 +228,17 @@ class PersistentCookieJar:
                 return cookie.value
         return None
 
+    def clear(self):
+        """清空全部内存 cookie 并删除持久化文件。"""
+        with self._lock:
+            self._cookies = {}
+        try:
+            path = self._store_path()
+            if path.exists():
+                path.unlink()
+        except Exception:
+            pass
+
     def remove(self, name: str) -> None:
         """移除单个 Cookie"""
         with self._lock:

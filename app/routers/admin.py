@@ -210,13 +210,13 @@ async def add_account(req: AddAccountRequest):
             },
         )
     try:
-        account = await account_pool.add_account(
+        account, created = await account_pool.add_account(
             psid=psid,
             psidts=psidts,
             label=req.label,
         )
-        if not (req.label or "").strip():
-            # 标签留空：后台自动抓 Google 账号邮箱命名，不阻塞上号响应
+        if created and not (req.label or "").strip():
+            # 新号且标签留空：后台自动抓 Google 账号邮箱命名，不阻塞上号响应
             asyncio.create_task(_auto_label_account(account.id))
         return {
             "status": "ok",
@@ -225,6 +225,7 @@ async def add_account(req: AddAccountRequest):
                 "label": account.label,
                 "status": account.status.value,
             },
+            "created": created,
         }
     except Exception as e:
         return JSONResponse(
@@ -293,6 +294,9 @@ async def preview_account(req: PreviewAccountRequest):
     from app.core.gemini_client import GeminiWebClient
 
     client = GeminiWebClient(psid=psid, psidts=psidts)
+    # 预览要回答的是「这段（新提交的）Cookie 是谁/活没活」，必须先清掉磁盘上
+    # 同 PSID 的陈旧 Cookie 罐，否则「磁盘优先」会拿旧 cookie 判新 cookie 的死刑。
+    client.wipe_cookie_jar()
     try:
         await asyncio.wait_for(client.initialize(), timeout=30)
         valid = bool(getattr(client, "_session_token", ""))

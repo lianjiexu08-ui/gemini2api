@@ -4,6 +4,7 @@ import time
 import uuid
 import random
 import asyncio
+import hashlib
 import logging
 from pathlib import Path
 from threading import Lock
@@ -459,6 +460,34 @@ class GeminiWebClient:
         self._last_check_result: dict | None = None
         self._last_reload_error: str = ""
         self._account_email: str = ""
+
+    def wipe_cookie_jar(self):
+        """清空持久化 Cookie 罐（内存 + 磁盘）。
+
+        适用场景：管理员显式提交了新的浏览器凭据（重新上号 / 插件捕获），
+        此时磁盘上旧的轮换 cookie 可能已被 Google 判死，必须连罐丢掉，
+        否则 initialize() 的「磁盘优先」逻辑会拿死 cookie 覆盖新凭据（毒罐问题）。"""
+        jar = self._cookie_jar
+        if jar is None:
+            try:
+                path = Path(settings.COOKIE_DIR) / (
+                    hashlib.sha256(self._psid.encode()).hexdigest()[:16] + ".json"
+                )
+                if path.exists():
+                    path.unlink()
+            except Exception as e:
+                logger.debug(f"wipe_cookie_jar(no client) failed: {e}")
+            return
+        try:
+            jar.clear()
+        except Exception as e:
+            logger.debug(f"wipe_cookie_jar clear failed: {e}")
+        try:
+            path = jar._store_path()
+            if path.exists():
+                path.unlink()
+        except Exception as e:
+            logger.debug(f"wipe_cookie_jar unlink failed: {e}")
 
     async def initialize(self):
         fingerprint_config.load()
@@ -1665,6 +1694,10 @@ class GeminiWebClient:
             self._psid = psid.strip().strip('"').strip("'").rstrip(";")
         if psidts:
             self._psidts = psidts.strip().strip('"').strip("'").rstrip(";")
+
+        # 显式换凭据 = 管理员新提交了浏览器 cookie：旧罐里的轮换 cookie 可能已死，
+        # 先整罐清空再种新值，避免「磁盘优先」把死 cookie 塞回请求。
+        self.wipe_cookie_jar()
 
         self._session_token = ""
         self._healthy = False
