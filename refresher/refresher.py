@@ -285,6 +285,17 @@ def refresh_account(browser, account):
                 time.sleep(5)
                 email_inputs = page.locator('input[type="email"]:visible').count()
                 password_inputs = page.locator('input[type="password"]:visible').count()
+            try:
+                visible_buttons = page.locator('button:visible').all_inner_texts()[:6]
+            except Exception:
+                visible_buttons = []
+            body_lower = (page.locator("body").inner_text(timeout=5000) or "").lower()
+            probe = (
+                f"Google 页面探测：email框={email_inputs} 密码框={password_inputs} "
+                f"按钮={','.join(visible_buttons)[:80]} "
+                f"验证提示={any(x in body_lower for x in ('verify', '2-step', 'try again', 'couldn'))}"
+            )
+            write_relogin_status(account_id, "processing", probe)
             print(
                 f"  [{label}] Login probe: url={page.url[:120]} "
                 f"email_inputs={email_inputs} password_inputs={password_inputs}"
@@ -295,6 +306,10 @@ def refresh_account(browser, account):
             email_box = page.locator('input[type="email"]:visible').first
             if email_box.count():
                 email_box.fill(account["email"]); page.get_by_role("button", name="Next").click(); time.sleep(3)
+            try:
+                page.wait_for_selector('input[type="password"]:visible', timeout=15000)
+            except Exception:
+                pass
             pw_box = page.locator('input[type="password"]:visible').first
             if pw_box.count():
                 pw_box.fill(account["password"]); page.get_by_role("button", name="Next").click(); time.sleep(4)
