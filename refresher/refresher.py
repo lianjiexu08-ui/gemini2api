@@ -259,6 +259,14 @@ def refresh_account(browser, account):
         page.goto(login_url, timeout=90000, wait_until="domcontentloaded")
         time.sleep(15)
 
+        if account.get("_force_login"):
+            email_inputs = page.locator('input[type="email"]').count()
+            password_inputs = page.locator('input[type="password"]').count()
+            print(
+                f"  [{label}] Login probe: url={page.url[:120]} "
+                f"email_inputs={email_inputs} password_inputs={password_inputs}"
+            )
+
         # Cookie 失效时，尝试使用服务器加密凭据完成登录；Google 风控/手机确认仍会停在页面。
         if account.get("email") and account.get("password") and "accounts.google.com" in page.url:
             email_box = page.locator('input[type="email"]').first
@@ -420,6 +428,8 @@ def refresh_all():
             except Exception as exc:
                 print(f"  [{account_id}] credential fetch skipped: {exc}")
             proxy = normalize_proxy(account.get("proxy"))
+            if requested:
+                account["_force_login"] = True
             if requested:
                 write_relogin_status(account_id, "processing", "凭据已读取，正在通过账号代理打开登录页")
             browser = None
