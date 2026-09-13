@@ -17,6 +17,7 @@ import os
 import secrets
 import subprocess
 import time
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 SERVICE = "gemini2api-relogin"
@@ -86,6 +87,26 @@ end tell'''
         subprocess.run(["osascript", "-e", script2], check=False)
 
 
+def serve() -> None:
+    class Handler(BaseHTTPRequestHandler):
+        def _reply(self, code, body):
+            raw = json.dumps(body, ensure_ascii=False).encode()
+            self.send_response(code); self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*"); self.send_header("Access-Control-Allow-Headers", "Content-Type")
+            self.end_headers(); self.wfile.write(raw)
+        def do_OPTIONS(self): self._reply(204, {})
+        def do_POST(self):
+            if self.path != "/relogin": self._reply(404, {"error": "not found"}); return
+            try:
+                n = int(self.headers.get("Content-Length", "0")); body = json.loads(self.rfile.read(n) or b"{}")
+                data = keychain_get(body.get("account_id", ""))
+                if not data: raise ValueError("账号不在本机 Keychain")
+                auto_login(data); self._reply(200, {"status": "started"})
+            except Exception as exc: self._reply(400, {"error": str(exc)})
+        def log_message(self, *_): pass
+    HTTPServer(("127.0.0.1", 17891), Handler).serve_forever()
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="gemini2api 本机重登助手")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -102,6 +123,7 @@ def main() -> None:
     l.add_argument("account")
     a = sub.add_parser("auto", help="本机自动填写邮箱、密码和 TOTP")
     a.add_argument("account")
+    sub.add_parser("serve", help="启动浏览器点击触发的本地重登服务")
     args = ap.parse_args()
     if args.cmd == "set":
         keychain_put(args.account, {"email": args.email, "password": args.password, "totp_secret": args.totp_secret, "proxy": args.proxy, "profile_dir": args.profile_dir})
@@ -120,6 +142,8 @@ def main() -> None:
         if not data:
             raise SystemExit("Keychain 中没有该账号")
         auto_login(data)
+    elif args.cmd == "serve":
+        serve()
 
 
 if __name__ == "__main__":

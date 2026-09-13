@@ -457,7 +457,7 @@ async function loadAccounts() {
                     <button class="btn btn-sm btn-outline acc-cookie-btn" data-account-id="${idEsc}" data-account-label="${labelEsc}">
                         <i class="fas fa-cookie-bite"></i> ${t('accounts.updateCookie')}
                     </button>
-                    <button class="btn btn-sm btn-outline acc-relogin-btn" data-authuser="${escapeAttr(account.authuser || '')}">
+                    <button class="btn btn-sm btn-outline acc-relogin-btn" data-account-id="${idEsc}" data-authuser="${escapeAttr(account.authuser || '')}">
                         <i class="fas fa-right-to-bracket"></i> ${t('accounts.relogin')}
                     </button>
                     <button class="btn btn-sm btn-danger acc-remove-btn" data-account-id="${idEsc}">
@@ -477,10 +477,14 @@ async function loadAccounts() {
         });
         container.querySelectorAll('.acc-relogin-btn').forEach(btn => {
             btn.addEventListener('click', () => {
+                const accountId = btn.dataset.accountId;
                 const authuser = btn.dataset.authuser;
                 const path = authuser ? `/u/${encodeURIComponent(authuser)}/app` : '/app';
                 window.open(`https://gemini.google.com${path}`, '_blank', 'noopener');
-                showToast('请在打开的 Gemini 页面完成登录，再用插件重新捕获 Cookie', 'info');
+                fetch('http://127.0.0.1:17891/relogin', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({account_id: accountId})})
+                    .then(r => r.json().then(x => ({ok: r.ok, x})))
+                    .then(({ok, x}) => showToast(ok ? '已触发本机自动重登' : `本机 Helper：${x.error || '未运行'}`, ok ? 'success' : 'warning'))
+                    .catch(() => showToast('请先在本机运行 relogin_helper.py serve', 'warning'));
             });
         });
         container.querySelectorAll('.acc-edit-btn').forEach(btn => {
