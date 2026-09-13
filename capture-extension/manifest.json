@@ -1,9 +1,14 @@
 {
   "manifest_version": 3,
   "name": "gemini2api 上号助手",
-  "version": "1.0.0",
-  "description": "一键捕获当前 Gemini 网页会话 Cookie 并上号到 gemini2api 号池",
-  "permissions": ["cookies", "storage", "activeTab", "scripting"],
+  "version": "1.1.0",
+  "description": "在同一 Chrome Profile 中按当前 Google authuser 捕获 Gemini 会话",
+  "permissions": [
+    "cookies",
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
   "incognito": "split",
   "host_permissions": [
     "https://*.google.com/*",
