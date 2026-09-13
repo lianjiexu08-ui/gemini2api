@@ -64,6 +64,25 @@ def load_accounts():
         with open(accounts_file, "r") as f:
             return json.load(f)
 
+    main_file = os.path.join(DATA_DIR, "accounts.json")
+    if os.path.exists(main_file):
+        try:
+            with open(main_file, "r") as f:
+                data = json.load(f)
+            return data.get("accounts", data) if isinstance(data, (dict, list)) else []
+        except Exception:
+            pass
+
+    # 默认直接读取主服务账号池，避免再维护一份 refresher_accounts.json。
+    try:
+        headers = {"Authorization": f"Bearer {ADMIN_KEY}"} if ADMIN_KEY else {}
+        resp = http_requests.get(f"{GEMINI2API_URL}/admin/accounts", headers=headers, timeout=10)
+        if resp.ok:
+            rows = resp.json().get("accounts", [])
+            return [{"id": a["id"], "psid": a.get("psid", ""), "psidts": a.get("psidts", ""), "label": a.get("label", a["id"])} for a in rows if a.get("id") and a.get("psid")]
+    except Exception as exc:
+        print(f"  [ERROR] Cannot load accounts from main service: {exc}")
+
     psid = os.environ.get("GEMINI_PSID", "")
     psidts = os.environ.get("GEMINI_PSIDTS", "")
     if psid:
