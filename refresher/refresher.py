@@ -262,6 +262,18 @@ def refresh_account(browser, account):
         if account.get("_force_login"):
             email_inputs = page.locator('input[type="email"]').count()
             password_inputs = page.locator('input[type="password"]').count()
+            if account.get("email") and account.get("password") and not email_inputs and not password_inputs:
+                # 失效的 PSID 可能仍让 Gemini URL 返回 200，但不会触发
+                # accounts.google.com 重定向。手动重登时显式走 Google 登录入口，
+                # 同时保留 continue/authuser，确保回到目标账号而不是默认账号。
+                continue_url = quote(login_url, safe="")
+                service_url = f"https://accounts.google.com/ServiceLogin?continue={continue_url}"
+                if authuser is not None and str(authuser).strip() not in ("", "0"):
+                    service_url += f"&authuser={quote(str(authuser).strip(), safe='')}"
+                page.goto(service_url, timeout=90000, wait_until="domcontentloaded")
+                time.sleep(5)
+                email_inputs = page.locator('input[type="email"]').count()
+                password_inputs = page.locator('input[type="password"]').count()
             print(
                 f"  [{label}] Login probe: url={page.url[:120]} "
                 f"email_inputs={email_inputs} password_inputs={password_inputs}"
