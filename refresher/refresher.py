@@ -271,8 +271,8 @@ def refresh_account(browser, account):
         time.sleep(15)
 
         if account.get("_force_login"):
-            email_inputs = page.locator('input[type="email"]:visible').count()
-            password_inputs = page.locator('input[type="password"]:visible').count()
+            email_inputs = page.locator('input[type="email"]:visible, input[name="identifier"]:visible, input[type="text"]:visible').count()
+            password_inputs = page.locator('input[type="password"]:visible, input[name="Passwd"]:visible').count()
             if account.get("email") and account.get("password") and not email_inputs and not password_inputs:
                 # 失效的 PSID 可能仍让 Gemini URL 返回 200，但不会触发
                 # accounts.google.com 重定向。手动重登时显式走 Google 登录入口，
@@ -283,8 +283,8 @@ def refresh_account(browser, account):
                     service_url += f"&authuser={quote(str(authuser).strip(), safe='')}"
                 page.goto(service_url, timeout=90000, wait_until="domcontentloaded")
                 time.sleep(5)
-                email_inputs = page.locator('input[type="email"]:visible').count()
-                password_inputs = page.locator('input[type="password"]:visible').count()
+                email_inputs = page.locator('input[type="email"]:visible, input[name="identifier"]:visible, input[type="text"]:visible').count()
+                password_inputs = page.locator('input[type="password"]:visible, input[name="Passwd"]:visible').count()
             try:
                 visible_buttons = page.locator('button:visible').all_inner_texts()[:6]
             except Exception:
@@ -309,14 +309,14 @@ def refresh_account(browser, account):
 
         # Cookie 失效时，尝试使用服务器加密凭据完成登录；Google 风控/手机确认仍会停在页面。
         if account.get("email") and account.get("password") and "accounts.google.com" in page.url:
-            email_box = page.locator('input[type="email"]:visible').first
+            email_box = page.locator('input[type="email"]:visible, input[name="identifier"]:visible, input[type="text"]:visible').first
             if email_box.count():
                 email_box.fill(account["email"]); page.get_by_role("button", name="Next").click(); time.sleep(3)
             try:
-                page.wait_for_selector('input[type="password"]:visible', timeout=15000)
+                page.wait_for_selector('input[type="password"]:visible, input[name="Passwd"]:visible', timeout=15000)
             except Exception:
                 pass
-            pw_box = page.locator('input[type="password"]:visible').first
+            pw_box = page.locator('input[type="password"]:visible, input[name="Passwd"]:visible').first
             if pw_box.count():
                 pw_box.fill(account["password"]); page.get_by_role("button", name="Next").click(); time.sleep(4)
             if account.get("totp_secret") or (account.get("totp_url") and account.get("totp_key")):
