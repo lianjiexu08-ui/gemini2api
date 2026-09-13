@@ -392,11 +392,16 @@ if __name__ == "__main__":
         print("\n[Single run mode] Done, exiting.")
         sys.exit(0)
 
-    print(f"Gemini Cookie Refresher started (interval: {REFRESH_INTERVAL}s; set REFRESH_INTERVAL in minutes)")
+    print(f"Gemini Cookie Refresher started (interval: {REFRESH_INTERVAL}s; queued relogin is checked every 2s)")
+    last_cycle = 0.0
     while True:
-        try:
-            refresh_all()
-        except Exception as e:
-            print(f"[FATAL] {e}")
-        print(f"\nSleeping {REFRESH_INTERVAL}s until next refresh...")
-        time.sleep(REFRESH_INTERVAL)
+        request_dir = os.path.join(DATA_DIR, "relogin_requests")
+        queued = os.path.isdir(request_dir) and any(name.endswith(".json") for name in os.listdir(request_dir))
+        if queued or time.time() - last_cycle >= REFRESH_INTERVAL:
+            try:
+                refresh_all()
+            except Exception as e:
+                print(f"[FATAL] {e}")
+            last_cycle = time.time()
+            print(f"\nSleeping until next refresh (interval {REFRESH_INTERVAL}s; queued relogin wakes within 2s)...")
+        time.sleep(2)
