@@ -12,18 +12,36 @@
 
 .accounts-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: 1.5rem;
+    grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+    gap: 1.25rem;
 }
 
 .account-card {
     background: var(--bg-primary);
-    padding: 1.5rem;
+    padding: 1.25rem;
+    min-width: 0;
     border-radius: var(--radius-xl);
     border: 1px solid var(--border-color);
     box-shadow: var(--shadow-sm);
     transition: var(--transition);
     position: relative;
+}
+
+/* 操作按钮允许换行，避免五个按钮把卡片撑出视口。 */
+.account-actions {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    width: 100%;
+}
+
+.account-actions .btn {
+    width: 100%;
+    min-width: 0;
+    min-height: 42px;
+    white-space: normal;
+    line-height: 1.2;
+    justify-content: center;
 }
 
 .account-card:hover {
@@ -271,6 +289,10 @@
 
     .modal-content {
         width: 95%;
+    }
+
+    .accounts-grid {
+        grid-template-columns: minmax(0, 1fr);
     }
 }
 
