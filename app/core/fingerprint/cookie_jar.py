@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 COOKIE_STORE_DIR = Path("data/cookies")
 
 
+def jar_path_for(account_id: str) -> Path:
+    """账号 PSID 对应的持久化 Cookie 罐文件路径（与 PersistentCookieJar 同一规则）。"""
+    digest = hashlib.sha256(account_id.encode()).hexdigest()[:16]
+    return COOKIE_STORE_DIR / f"{digest}.json"
+
+
 @dataclass
 class StoredCookie:
     name: str
@@ -258,8 +264,7 @@ class PersistentCookieJar:
             self._persist()
 
     def _store_path(self) -> Path:
-        digest = hashlib.sha256(self._account_id.encode()).hexdigest()[:16]
-        return COOKIE_STORE_DIR / f"{digest}.json"
+        return jar_path_for(self._account_id)
 
     def _load(self):
         path = self._store_path()

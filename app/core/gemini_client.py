@@ -16,7 +16,7 @@ from curl_cffi.requests import AsyncSession
 from app.config import settings
 from app.core.fingerprint.config import fingerprint_config
 from app.core.fingerprint.header_builder import header_builder
-from app.core.fingerprint.cookie_jar import PersistentCookieJar
+from app.core.fingerprint.cookie_jar import PersistentCookieJar, jar_path_for
 from app.core.fingerprint.jitter import apply_jitter, random_delay_factor
 from app.core.usage_metrics import live_metrics
 from app.utils.tools import maybe_image_generation_intent
@@ -468,24 +468,16 @@ class GeminiWebClient:
         此时磁盘上旧的轮换 cookie 可能已被 Google 判死，必须连罐丢掉，
         否则 initialize() 的「磁盘优先」逻辑会拿死 cookie 覆盖新凭据（毒罐问题）。"""
         jar = self._cookie_jar
-        if jar is None:
+        if jar is not None:
             try:
-                path = Path(settings.COOKIE_DIR) / (
-                    hashlib.sha256(self._psid.encode()).hexdigest()[:16] + ".json"
-                )
-                if path.exists():
-                    path.unlink()
+                jar.clear()
             except Exception as e:
-                logger.debug(f"wipe_cookie_jar(no client) failed: {e}")
-            return
+                logger.debug(f"wipe_cookie_jar clear failed: {e}")
         try:
-            jar.clear()
-        except Exception as e:
-            logger.debug(f"wipe_cookie_jar clear failed: {e}")
-        try:
-            path = jar._store_path()
+            path = jar_path_for(self._psid)
             if path.exists():
                 path.unlink()
+                logger.info(f"Cookie jar wiped for psid …{self._psid[-8:]}")
         except Exception as e:
             logger.debug(f"wipe_cookie_jar unlink failed: {e}")
 
