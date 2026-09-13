@@ -3,7 +3,10 @@
  */
 
 const TOKEN_KEY = 'gemini2api_token';
-const SESSION_TIMEOUT = 5 * 60 * 1000; // 5 minutes
+// 无操作自动登出时长：默认 8 小时（一个工作日），5 分钟对运维面板太苛刻。
+// 可用 localStorage.setItem('gemini2api_session_timeout', '<毫秒数>') 按部署自定义。
+const SESSION_TIMEOUT = parseInt(localStorage.getItem('gemini2api_session_timeout'), 10)
+    || 8 * 60 * 60 * 1000;
 let _sessionTimer = null;
 
 function _resetSessionTimer() {
