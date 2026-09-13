@@ -545,12 +545,15 @@ async function loadAccounts() {
         container.querySelectorAll('.acc-relogin-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 const accountId = btn.dataset.accountId;
-                const authuser = btn.dataset.authuser;
-                const path = authuser ? `/u/${encodeURIComponent(authuser)}/app` : '/app';
-                window.open(`https://gemini.google.com${path}`, '_blank', 'noopener');
+                btn.disabled = true;
                 apiCall('POST', `/admin/accounts/${accountId}/relogin`)
-                    .then(() => showToast('已加入服务器 Playwright 重登队列', 'success'))
-                    .catch(() => showToast('服务器重登队列不可用，请检查 Playwright 刷新器', 'warning'));
+                    .then(() => {
+                        showToast('已触发服务器自动重登，正在获取新会话 Cookie', 'success');
+                        // 刷新器完成后自动更新卡片状态；不打开浏览器，也不需要手动捕获。
+                        setTimeout(() => loadAccounts(), 12000);
+                    })
+                    .catch(() => showToast('服务器自动重登不可用，请检查 Playwright 刷新器', 'warning'))
+                    .finally(() => { btn.disabled = false; });
             });
         });
         container.querySelectorAll('.acc-edit-btn').forEach(btn => {
