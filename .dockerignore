@@ -33,7 +33,8 @@ accounts.json
 *_rsa
 .cookies
 data
-api
+# fork: 本地构建需包含 api/（上游发布流水线构建时会临时取消排除）
+# api
 
 # Python caches / virtualenvs
 __pycache__
