@@ -12,6 +12,7 @@ services:
       # 不要改成 ./accounts.json 单文件 bind mount：atomic_write_text 的 os.replace
       # 无法覆盖挂载点，会抛 EBUSY（Device or resource busy）。
       - ACCOUNTS_FILE=data/accounts.json
+    ports:
       - "5918:5918"
     volumes:
       - ./data:/app/data
