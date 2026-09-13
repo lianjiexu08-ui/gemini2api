@@ -85,6 +85,17 @@ def fetch_2fa_code(url, key):
     return resp.text.strip()
 
 
+def safe_error(exc, account=None):
+    """Return a useful error without leaking login credentials into logs."""
+    text = str(exc)
+    if account:
+        for key in ("password", "totp_secret", "totp_key", "email"):
+            value = account.get(key)
+            if value:
+                text = text.replace(str(value), "[redacted]")
+    return text[:240]
+
+
 def generate_totp(secret, digits=6, period=30):
     compact = secret.replace(" ", "").upper()
     raw = base64.b32decode(compact + "=" * ((8 - len(compact) % 8) % 8))
@@ -260,8 +271,8 @@ def refresh_account(browser, account):
         time.sleep(15)
 
         if account.get("_force_login"):
-            email_inputs = page.locator('input[type="email"]').count()
-            password_inputs = page.locator('input[type="password"]').count()
+            email_inputs = page.locator('input[type="email"]:visible').count()
+            password_inputs = page.locator('input[type="password"]:visible').count()
             if account.get("email") and account.get("password") and not email_inputs and not password_inputs:
                 # 失效的 PSID 可能仍让 Gemini URL 返回 200，但不会触发
                 # accounts.google.com 重定向。手动重登时显式走 Google 登录入口，
@@ -272,8 +283,8 @@ def refresh_account(browser, account):
                     service_url += f"&authuser={quote(str(authuser).strip(), safe='')}"
                 page.goto(service_url, timeout=90000, wait_until="domcontentloaded")
                 time.sleep(5)
-                email_inputs = page.locator('input[type="email"]').count()
-                password_inputs = page.locator('input[type="password"]').count()
+                email_inputs = page.locator('input[type="email"]:visible').count()
+                password_inputs = page.locator('input[type="password"]:visible').count()
             print(
                 f"  [{label}] Login probe: url={page.url[:120]} "
                 f"email_inputs={email_inputs} password_inputs={password_inputs}"
@@ -281,15 +292,15 @@ def refresh_account(browser, account):
 
         # Cookie 失效时，尝试使用服务器加密凭据完成登录；Google 风控/手机确认仍会停在页面。
         if account.get("email") and account.get("password") and "accounts.google.com" in page.url:
-            email_box = page.locator('input[type="email"]').first
+            email_box = page.locator('input[type="email"]:visible').first
             if email_box.count():
                 email_box.fill(account["email"]); page.get_by_role("button", name="Next").click(); time.sleep(3)
-            pw_box = page.locator('input[type="password"]').first
+            pw_box = page.locator('input[type="password"]:visible').first
             if pw_box.count():
                 pw_box.fill(account["password"]); page.get_by_role("button", name="Next").click(); time.sleep(4)
             if account.get("totp_secret") or (account.get("totp_url") and account.get("totp_key")):
                 code = generate_totp(account["totp_secret"]) if account.get("totp_secret") else fetch_2fa_code(account["totp_url"], account["totp_key"])
-                code_box = page.locator('input[name="totpPin"], input[name="code"], input[type="tel"]').first
+                code_box = page.locator('input[name="totpPin"]:visible, input[name="code"]:visible, input[type="tel"]:visible').first
                 if code_box.count(): code_box.fill(code); page.get_by_role("button", name="Next").click(); time.sleep(8)
 
         # 不能把登录页里残留的旧 Cookie 误判成新会话。没有凭据、密码错误、
@@ -324,8 +335,9 @@ def refresh_account(browser, account):
             print(f"  [{label}] FAILED - Cookie not found, may need re-login")
             return {"id": account_id, "label": label, "status": "expired", "error": "未获取到有效 Cookie", "updated_at": time.time()}
     except Exception as e:
-        print(f"  [{label}] ERROR - {e}")
-        return {"id": account_id, "label": label, "status": "error", "error": str(e), "updated_at": time.time()}
+        message = safe_error(e, account)
+        print(f"  [{label}] ERROR - {message}")
+        return {"id": account_id, "label": label, "status": "error", "error": message, "updated_at": time.time()}
     finally:
         context.close()
 
@@ -453,10 +465,11 @@ def refresh_all():
                 if requested and result.get("status") == "active":
                     write_relogin_status(account_id, "cookies_found", "已获取新 Cookie，正在回写账号池")
             except Exception as exc:
-                print(f"  [{account_id}] ERROR - browser refresh failed: {exc}")
+                message = safe_error(exc, account)
+                print(f"  [{account_id}] ERROR - browser refresh failed: {message}")
                 if requested:
-                    write_relogin_status(account_id, "failed", f"浏览器重登失败：{str(exc)[:180]}")
-                result = {"id": account_id, "label": account.get("label", account_id), "status": "error", "error": str(exc), "updated_at": time.time()}
+                    write_relogin_status(account_id, "failed", f"浏览器重登失败：{message}")
+                result = {"id": account_id, "label": account.get("label", account_id), "status": "error", "error": message, "updated_at": time.time()}
             finally:
                 if browser is not None:
                     browser.close()
