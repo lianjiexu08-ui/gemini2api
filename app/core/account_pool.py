@@ -653,6 +653,18 @@ class AccountPool:
                 return True
         return False
 
+    def mark_credentials_active(self, account_id: str) -> bool:
+        """Cookie 通过客户端校验后恢复账号池状态并持久化。"""
+        for a in self._accounts:
+            if a.id == account_id:
+                a.status = AccountStatus.ACTIVE
+                a.consecutive_failures = 0
+                a.last_error = ""
+                a.last_error_at = None
+                self._save_to_file()
+                return True
+        return False
+
     def update_proxy(self, account_id: str, proxy: str | None) -> bool:
         for a in self._accounts:
             if a.id == account_id:

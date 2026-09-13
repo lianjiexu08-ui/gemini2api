@@ -561,8 +561,16 @@ async def update_account_cookies(account_id: str, req: UpdateCookiesRequest):
                     # 使用解析后的值同步池内字段并持久化；请求可能只传整段 cookie，
                     # 此时 req.psid/req.psidts 为空，必须保存 _resolve_credentials 的结果。
                     account_pool.update_credentials(account_id, psid=psid, psidts=psidts)
+                    account_pool.mark_credentials_active(account_id)
                     if req.proxy is not None:
                         account_pool.update_proxy(account_id, req.proxy)
+                    # 如果这次更新来自人工重登，收敛重登状态，让前端结束橙色等待状态。
+                    status_path = _relogin_status_path(account_id)
+                    try:
+                        if status_path.exists() and json.loads(status_path.read_text()).get("status") == "manual_required":
+                            _write_relogin_status(account_id, "completed", "Cookie 已通过插件回写账号池，账号已恢复可用")
+                    except Exception:
+                        pass
                     return {"status": "ok", "message": f"Account {account_id} cookies updated"}
                 return JSONResponse(
                     status_code=503,
