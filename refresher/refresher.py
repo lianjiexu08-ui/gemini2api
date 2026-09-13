@@ -90,6 +90,58 @@ def load_accounts():
     return []
 
 
+def load_relogin_requests():
+    """读取面板发出的重登请求，返回 account_id -> request file 映射。
+
+    主服务会在共享 data/relogin_requests/{account_id}.json 写入一个请求文件。
+    文件名本身也作为兜底 ID，这样即使请求内容损坏也不会让刷新循环中断。
+    """
+    request_dir = os.path.join(DATA_DIR, "relogin_requests")
+    if not os.path.isdir(request_dir):
+        return {}
+
+    pending = {}
+    for name in os.listdir(request_dir):
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(request_dir, name)
+        account_id = name[:-5]
+        try:
+            with open(path, "r") as f:
+                payload = json.load(f)
+            account_id = str(payload.get("account_id") or account_id)
+        except Exception as exc:
+            print(f"  [relogin] ignoring malformed request {name}: {exc}")
+        if account_id:
+            pending[account_id] = path
+    return pending
+
+
+def prioritize_relogin_accounts(accounts, pending):
+    """将面板点选的账号移到本轮最前面，保持其余账号原有顺序。"""
+    if not pending:
+        return accounts
+    requested = [a for a in accounts if a.get("id") in pending]
+    regular = [a for a in accounts if a.get("id") not in pending]
+    if requested:
+        print(f"  [relogin] prioritizing: {', '.join(a['id'] for a in requested)}")
+    return requested + regular
+
+
+def consume_relogin_request(account_id, pending):
+    """删除已开始处理的请求，避免每个刷新周期重复触发重登。"""
+    path = pending.get(account_id)
+    if not path:
+        return
+    try:
+        os.unlink(path)
+        print(f"  [relogin] consumed request for {account_id}")
+    except FileNotFoundError:
+        pass
+    except OSError as exc:
+        print(f"  [relogin] could not consume {account_id}: {exc}")
+
+
 def ensure_state_dir(account_id):
     path = os.path.join(STATE_DIR, account_id)
     os.makedirs(path, exist_ok=True)
@@ -230,11 +282,21 @@ def refresh_all():
     print(f"[{ts}] Starting cookie refresh cycle...")
     print(f"{'='*50}")
 
+    pending_relogins = load_relogin_requests()
     accounts = load_accounts()
     if not accounts:
         print("  [ERROR] No accounts configured!")
         print("  Set GEMINI_PSID/GEMINI_PSIDTS env vars or create data/refresher_accounts.json")
         return
+
+    # “重登”按钮写入共享目录后，该账号会在本轮排到最前面；处理一次后
+    # 消费请求文件，后续周期恢复普通的全量续期顺序。
+    accounts = prioritize_relogin_accounts(accounts, pending_relogins)
+    known_ids = {a.get("id") for a in accounts}
+    for account_id in list(pending_relogins):
+        if account_id not in known_ids:
+            print(f"  [relogin] dropping request for unknown account {account_id}")
+            consume_relogin_request(account_id, pending_relogins)
 
     os.makedirs(DATA_DIR, exist_ok=True)
     results = []
@@ -251,22 +313,31 @@ def refresh_all():
             ]
 
         for i, account in enumerate(accounts):
+            account_id = account.get("id")
             # credentials are fetched only for this run and never written to refresher output
             try:
                 h = {"Authorization": f"Bearer {ADMIN_KEY}"} if ADMIN_KEY else {}
-                cr = http_requests.get(f"{GEMINI2API_URL}/admin/accounts/{account['id']}/credentials", headers=h, timeout=10)
+                cr = http_requests.get(f"{GEMINI2API_URL}/admin/accounts/{account_id}/credentials", headers=h, timeout=10)
                 if cr.ok: account.update(cr.json())
             except Exception as exc:
-                print(f"  [{account.get('id')}] credential fetch skipped: {exc}")
+                print(f"  [{account_id}] credential fetch skipped: {exc}")
             proxy = account.get("proxy")
-            browser = p.chromium.launch(headless=True, proxy={"server": proxy} if proxy else None, args=launch_args)
-            result = refresh_account(browser, account)
-            browser.close()
+            browser = None
+            try:
+                browser = p.chromium.launch(headless=True, proxy={"server": proxy} if proxy else None, args=launch_args)
+                result = refresh_account(browser, account)
+            except Exception as exc:
+                print(f"  [{account_id}] ERROR - browser refresh failed: {exc}")
+                result = {"id": account_id, "label": account.get("label", account_id), "status": "error", "error": str(exc), "updated_at": time.time()}
+            finally:
+                if browser is not None:
+                    browser.close()
+                # 无论成功、Cookie 失效还是浏览器异常，都只消费本次请求，
+                # 避免单个坏账号在每个周期阻塞整个账号池。
+                consume_relogin_request(account_id, pending_relogins)
             results.append(result)
             if i < len(accounts) - 1:
                 time.sleep(5)
-
-        browser.close()
 
     with open(COOKIES_OUTPUT, "w") as f:
         json.dump(results, f, indent=2)
