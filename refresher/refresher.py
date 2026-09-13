@@ -311,7 +311,29 @@ def refresh_account(browser, account):
         if account.get("email") and account.get("password") and "accounts.google.com" in page.url:
             email_box = page.locator('input[type="email"]:visible, input[name="identifier"]:visible, input[type="text"]:visible').first
             if email_box.count():
-                email_box.fill(account["email"]); page.get_by_role("button", name="Next").click(); time.sleep(3)
+                email_box.fill(account["email"])
+                page.get_by_role("button", name="Next").last.click()
+                time.sleep(5)
+                try:
+                    after_email_body = (page.locator("body").inner_text(timeout=5000) or "").lower()
+                    write_relogin_status(
+                        account_id,
+                        "processing",
+                        "邮箱已提交：密码框="
+                        + str(page.locator('input[type="password"]:visible, input[name="Passwd"]:visible').count())
+                        + ", 页面提示="
+                        + ",".join(
+                            x for x, needle in (
+                                ("账号不存在", "couldn't find your google account"),
+                                ("密码错误", "wrong password"),
+                                ("验证码", "captcha"),
+                                ("验证", "verify"),
+                                ("重试", "try again"),
+                            ) if needle in after_email_body
+                        ),
+                    )
+                except Exception:
+                    pass
             try:
                 page.wait_for_selector('input[type="password"]:visible, input[name="Passwd"]:visible', timeout=15000)
             except Exception:
@@ -322,7 +344,7 @@ def refresh_account(browser, account):
             if account.get("totp_secret") or (account.get("totp_url") and account.get("totp_key")):
                 code = generate_totp(account["totp_secret"]) if account.get("totp_secret") else fetch_2fa_code(account["totp_url"], account["totp_key"])
                 code_box = page.locator('input[name="totpPin"]:visible, input[name="code"]:visible, input[type="tel"]:visible').first
-                if code_box.count(): code_box.fill(code); page.get_by_role("button", name="Next").click(); time.sleep(8)
+                if code_box.count(): code_box.fill(code); page.get_by_role("button", name="Next").last.click(); time.sleep(8)
 
         # 不能把登录页里残留的旧 Cookie 误判成新会话。没有凭据、密码错误、
         # 2FA/风控未完成时，Playwright 仍可能带着旧 Cookie 返回。
