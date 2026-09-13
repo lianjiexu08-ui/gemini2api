@@ -82,7 +82,11 @@ async def verify_api_key(request: Request):
         raise _missing_key_error()
 
     if not _key_matches(key, settings.api_key):
-        raise _invalid_key_error()
+        # 配置了独立 admin key 时，面板 Playground 会带着登录态(admin key)调业务 API，
+        # 管理员理应拥有完整权限，故业务 API 同时接受 admin key（不放宽匿名访问）。
+        admin_key = (settings.admin_api_key or "").strip()
+        if not admin_key or not _key_matches(key, admin_key):
+            raise _invalid_key_error()
 
 
 async def verify_admin_key(request: Request):
