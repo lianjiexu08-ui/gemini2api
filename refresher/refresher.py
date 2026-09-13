@@ -12,6 +12,7 @@ import time
 import base64
 import hashlib
 import hmac
+from urllib.parse import quote, unquote, urlsplit
 import requests as http_requests
 from playwright.sync_api import sync_playwright
 
@@ -32,6 +33,42 @@ if _interval_seconds is not None:
 else:
     REFRESH_INTERVAL = int(float(os.environ.get("REFRESH_INTERVAL", "8")) * 60)
 SINGLE_RUN = os.environ.get("SINGLE_RUN", "false").lower() == "true"
+
+
+def normalize_proxy(value):
+    """Accept URL form and host:port:user:password, return a URL form."""
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    if "://" not in raw:
+        parts = raw.split(":", 3)
+        if len(parts) == 4 and parts[1].isdigit() and parts[0] and parts[2]:
+            host, port, username, password = parts
+            return f"http://{quote(username, safe='')}:{quote(password, safe='')}@{host}:{port}"
+        if len(parts) == 2 and parts[1].isdigit() and parts[0]:
+            return f"http://{parts[0]}:{parts[1]}"
+    return raw
+
+
+def playwright_proxy(value):
+    normalized = normalize_proxy(value)
+    if not normalized:
+        return None
+    parsed = urlsplit(normalized)
+    try:
+        port = parsed.port
+    except ValueError:
+        return {"server": normalized}
+    if not parsed.hostname or not port:
+        return {"server": normalized}
+    result = {"server": f"{parsed.scheme or 'http'}://{parsed.hostname}:{port}"}
+    if parsed.username is not None:
+        result["username"] = unquote(parsed.username)
+    if parsed.password is not None:
+        result["password"] = unquote(parsed.password)
+    return result
 
 
 def fetch_2fa_code(url, key):
@@ -321,10 +358,10 @@ def refresh_all():
                 if cr.ok: account.update(cr.json())
             except Exception as exc:
                 print(f"  [{account_id}] credential fetch skipped: {exc}")
-            proxy = account.get("proxy")
+            proxy = normalize_proxy(account.get("proxy"))
             browser = None
             try:
-                browser = p.chromium.launch(headless=True, proxy={"server": proxy} if proxy else None, args=launch_args)
+                browser = p.chromium.launch(headless=True, proxy=playwright_proxy(proxy), args=launch_args)
                 result = refresh_account(browser, account)
             except Exception as exc:
                 print(f"  [{account_id}] ERROR - browser refresh failed: {exc}")

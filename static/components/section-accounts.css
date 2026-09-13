@@ -323,3 +323,16 @@
     font-size: .82rem;
     line-height: 1.5;
 }
+
+.proxy-manager-modal { max-width: 720px; }
+.proxy-list { display: flex; flex-direction: column; gap: .5rem; max-height: 320px; overflow-y: auto; }
+.proxy-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .65rem .75rem; border: 1px solid var(--border-color); border-radius: var(--radius-md); }
+.proxy-row-main { min-width: 0; }
+.proxy-row-value { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+.proxy-row-meta { color: var(--text-secondary); font-size: .8rem; margin-top: .2rem; }
+.proxy-row .btn { flex: 0 0 auto; }
+@media (max-width: 640px) { .proxy-row { align-items: flex-start; flex-direction: column; } }
+.proxy-item { display:flex; align-items:center; justify-content:space-between; gap:.75rem; padding:.65rem .75rem; border:1px solid var(--border-color); border-radius:var(--radius-md); }
+.proxy-item code { min-width:0; overflow-wrap:anywhere; }
+.proxy-assigned { color:var(--text-secondary); font-size:.82rem; white-space:nowrap; }
+@media (max-width:640px) { .proxy-item { align-items:flex-start; flex-direction:column; } .proxy-assigned { white-space:normal; } }

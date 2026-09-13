@@ -17,10 +17,23 @@ import os
 import secrets
 import subprocess
 import time
+from urllib.parse import quote
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 SERVICE = "gemini2api-relogin"
+
+
+def normalize_proxy(value: str | None) -> str | None:
+    if not value:
+        return None
+    raw = str(value).strip()
+    if "://" not in raw:
+        parts = raw.split(":", 3)
+        if len(parts) == 4 and parts[1].isdigit() and parts[0] and parts[2]:
+            host, port, username, password = parts
+            return f"http://{quote(username, safe='')}:{quote(password, safe='')}@{host}:{port}"
+    return raw
 
 
 def keychain_get(account: str) -> dict:
@@ -55,7 +68,7 @@ def launch(data: dict) -> None:
     profile = data.get("profile_dir") or str(Path.home() / "Library/Application Support/Google/Chrome")
     args = [chrome, f"--user-data-dir={profile}", "https://gemini.google.com/app"]
     if data.get("proxy"):
-        args.insert(1, f"--proxy-server={data['proxy']}")
+        args.insert(1, f"--proxy-server={normalize_proxy(data['proxy'])}")
     subprocess.Popen(args, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
@@ -126,7 +139,7 @@ def main() -> None:
     sub.add_parser("serve", help="启动浏览器点击触发的本地重登服务")
     args = ap.parse_args()
     if args.cmd == "set":
-        keychain_put(args.account, {"email": args.email, "password": args.password, "totp_secret": args.totp_secret, "proxy": args.proxy, "profile_dir": args.profile_dir})
+        keychain_put(args.account, {"email": args.email, "password": args.password, "totp_secret": args.totp_secret, "proxy": normalize_proxy(args.proxy), "profile_dir": args.profile_dir})
     elif args.cmd == "code":
         data = keychain_get(args.account)
         if not data.get("totp_secret"):

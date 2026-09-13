@@ -21,6 +21,7 @@ from app.core.fingerprint.cookie_jar import PersistentCookieJar, jar_path_for
 from app.core.fingerprint.jitter import apply_jitter, random_delay_factor
 from app.core.usage_metrics import live_metrics
 from app.utils.tools import maybe_image_generation_intent
+from app.utils.proxy import normalize_proxy
 
 logger = logging.getLogger(__name__)
 
@@ -442,7 +443,7 @@ class GeminiWebClient:
         # profile PSID. Keep this selector with the credential so one Profile can host
         # multiple Gemini accounts.
         self._authuser = None if authuser is None or str(authuser).strip() == "" else str(authuser).strip()
-        self._proxy = proxy.strip() if proxy and str(proxy).strip() else None
+        self._proxy = normalize_proxy(proxy)
         self._session_uuid: str = str(uuid.uuid4()).upper()
         self._session_token: str = ""
         self._push_id: str = ""

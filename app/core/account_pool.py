@@ -12,6 +12,7 @@ from app.core.fallback import is_empty_result
 from app.config import settings
 from app.core.usage_metrics import live_metrics
 from app.utils.atomic_io import atomic_write_text
+from app.utils.proxy import normalize_proxy
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +207,7 @@ class AccountPool:
                     psid=psid.strip().strip('"').strip("'").rstrip(";"),
                     psidts=(item.get("psidts") or "").strip().strip('"').strip("'").rstrip(";"),
                     authuser=_normalize_authuser(item.get("authuser")),
-                    proxy=(str(item.get("proxy")).strip() if item.get("proxy") else None),
+                    proxy=normalize_proxy(item.get("proxy")),
                     label=item.get("label", f"account-{i}"),
                 )
             except Exception as e:
@@ -598,7 +599,7 @@ class AccountPool:
         norm_psid = psid.strip().strip('"').strip("'").rstrip(";")
         norm_psidts = psidts.strip().strip('"').strip("'").rstrip(";")
         norm_authuser = _normalize_authuser(authuser)
-        norm_proxy = str(proxy).strip() if proxy and str(proxy).strip() else None
+        norm_proxy = normalize_proxy(proxy)
         for a in self._accounts:
             if a.psid == norm_psid and a.authuser == norm_authuser:
                 a.psidts = norm_psidts or a.psidts
@@ -655,7 +656,7 @@ class AccountPool:
     def update_proxy(self, account_id: str, proxy: str | None) -> bool:
         for a in self._accounts:
             if a.id == account_id:
-                a.proxy = str(proxy).strip() if proxy and str(proxy).strip() else None
+                a.proxy = normalize_proxy(proxy)
                 self._save_to_file()
                 return True
         return False

@@ -7,6 +7,9 @@
             <button class="btn btn-outline" id="testAllAccountsBtn">
                 <i class="fas fa-vials"></i> <span data-i18n="accounts.testAll">全部测试</span>
             </button>
+            <button class="btn btn-outline" id="proxyManagerBtn">
+                <i class="fas fa-network-wired"></i> 代理管理
+            </button>
             <button class="btn btn-primary" id="addAccountBtn">
                 <i class="fas fa-plus"></i> <span data-i18n="accounts.add">添加账号</span>
             </button>
@@ -61,8 +64,9 @@
                     <input type="password" id="add-totp-key" class="form-control" autocomplete="new-password">
                 </div>
                 <div class="form-group">
-                    <label for="add-proxy">该账号代理（可选）</label>
-                    <input type="text" id="add-proxy" class="form-control" placeholder="http://user:pass@host:port 或 socks5://host:port">
+                    <label for="add-proxy-select">该账号代理（可选）</label>
+                    <select id="add-proxy-select" class="form-control proxy-select"><option value="">不使用代理</option></select>
+                    <input type="text" id="add-proxy" class="form-control" list="proxyOptions" placeholder="选择已导入代理，或输入 host:port:user:pass">
                 </div>
                 <p class="text-muted">保存后凭据会加密存储在服务器，点击账号卡片的“重登”即可自动尝试登录。</p>
             </fieldset>
@@ -156,8 +160,9 @@
                 <input type="text" id="update-psidts" class="form-control" data-i18n-placeholder="accounts.newPsidtsPlaceholder" placeholder="输入新的 __Secure-1PSIDTS（或粘贴上方完整 Cookie）">
             </div>
             <div class="form-group">
-                <label for="update-proxy">代理地址（可选）</label>
-                <input type="text" id="update-proxy" class="form-control" placeholder="http://user:pass@host:port 或 socks5://host:port">
+                <label for="update-proxy-select">代理地址（可选）</label>
+                <select id="update-proxy-select" class="form-control proxy-select"><option value="">不使用代理</option></select>
+                <input type="text" id="update-proxy" class="form-control" list="proxyOptions" placeholder="选择已导入代理，或输入 host:port:user:pass">
             </div>
             <fieldset class="credential-fields">
                 <legend>自动重登配置</legend>
@@ -188,4 +193,23 @@
             <button class="btn btn-primary" id="confirmUpdateCookie" data-i18n="accounts.confirmUpdate">确认更新</button>
         </div>
     </div>
+</div>
+
+<datalist id="proxyOptions"></datalist>
+
+<!-- Proxy Manager Modal -->
+<div id="proxyManagerModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="proxyManagerTitle">
+  <div class="modal-content proxy-manager-modal">
+    <div class="modal-header">
+      <h3 id="proxyManagerTitle">代理管理</h3>
+      <button class="modal-close" aria-label="Close"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="modal-body">
+      <p class="text-muted">每行一个代理，支持 <code>host:port:username:password</code>、<code>http://user:pass@host:port</code> 和 SOCKS5。</p>
+      <textarea id="proxy-import-text" class="form-control" rows="5" placeholder="104.253.59.240:6663:Youcantrus:Youcantrus"></textarea>
+      <button class="btn btn-primary" id="importProxiesBtn" style="margin-top:.75rem"><i class="fas fa-file-import"></i> 批量导入</button>
+      <div id="proxyList" class="proxy-list" style="margin-top:1rem"></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-secondary modal-cancel">关闭</button></div>
+  </div>
 </div>

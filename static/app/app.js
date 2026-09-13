@@ -15,6 +15,9 @@ import { initI18n, t } from './i18n.js';
 import { initLanguageSwitcher } from './language-switcher.js';
 
 let isAppInitialized = false;
+let _accountsCache = [];
+let _managedProxies = [];
+let _updateInitialProxy = '';
 
 const elements = {
     navItems: null,
@@ -382,10 +385,55 @@ function updatePlaygroundModels(modelsSet) {
 // Accounts
 // ============================================================================
 
+function _proxyDisplay(proxy) {
+    const value = String(proxy || '');
+    return value.length > 100 ? `${value.slice(0, 97)}...` : value;
+}
+function _populateProxySelects() {
+    document.querySelectorAll('.proxy-select').forEach(select => {
+        const current = select.value;
+        select.innerHTML = '<option value="">不使用代理</option>' + _managedProxies.map(item => `<option value="${escapeAttr(item.proxy || '')}">${escapeHtml(_proxyDisplay(item.proxy))}（已配置 ${Number(item.assigned_count || 0)} 个账号）</option>`).join('');
+        if (current) select.value = current;
+    });
+}
+async function loadManagedProxies() {
+    try {
+        const data = await apiCall('GET', '/admin/proxies');
+        _managedProxies = Array.isArray(data.proxies) ? data.proxies : [];
+        _populateProxySelects();
+        renderProxyList();
+    } catch (e) { console.warn('加载代理池失败:', e); }
+}
+function renderProxyList() {
+    const container = document.getElementById('proxyList');
+    if (!container) return;
+    if (!_managedProxies.length) { container.innerHTML = '<div class="text-muted">暂无代理，请在上方批量导入。</div>'; return; }
+    container.innerHTML = _managedProxies.map(item => {
+        const assigned = (item.assigned_accounts || []).map(a => a.label || a.id).join('、');
+        const detail = assigned ? `已配置 ${item.assigned_count} 个账号：${assigned}` : '尚未配置账号';
+        return `<div class="proxy-row"><div class="proxy-row-main"><div class="proxy-row-value">${escapeHtml(_proxyDisplay(item.proxy))}</div><div class="proxy-row-meta">${escapeHtml(detail)}</div></div><button class="btn btn-sm btn-danger proxy-delete-btn" data-proxy-id="${escapeAttr(item.id)}"><i class="fas fa-trash"></i> 删除</button></div>`;
+    }).join('');
+    container.querySelectorAll('.proxy-delete-btn').forEach(btn => btn.addEventListener('click', async () => {
+        try { await apiCall('DELETE', `/admin/proxies/${encodeURIComponent(btn.dataset.proxyId)}`); showToast('代理已从管理池删除（不会清除已绑定账号）', 'success'); await loadManagedProxies(); }
+        catch (e) { showToast(`删除代理失败: ${e.message}`, 'error'); }
+    }));
+}
+function openProxyManagerModal() { document.getElementById('proxyManagerModal')?.classList.add('active'); loadManagedProxies(); }
+function closeProxyManagerModal() { document.getElementById('proxyManagerModal')?.classList.remove('active'); }
+async function importProxies() {
+    const input = document.getElementById('proxy-import-text');
+    const text = input?.value.trim() || '';
+    if (!text) { showToast('请先填写代理列表', 'warning'); return; }
+    try { const result = await apiCall('POST', '/admin/proxies/import', { proxies: text }); if (input) input.value = ''; await loadManagedProxies(); showToast(`已导入 ${result.added || 0} 个代理`, 'success'); }
+    catch (e) { showToast(`导入代理失败: ${e.message}`, 'error'); }
+}
+
 async function loadAccounts() {
     try {
         const data = await apiCall('GET', '/admin/accounts');
         const accounts = data.accounts || [];
+        _accountsCache = accounts;
+        await loadManagedProxies();
 
         const container = document.getElementById('accountsList');
         if (!container) return;
@@ -604,7 +652,7 @@ async function submitAddAccount() {
     const totp_secret = document.getElementById('add-totp')?.value || '';
     const totp_url = document.getElementById('add-totp-url')?.value.trim() || '';
     const totp_key = document.getElementById('add-totp-key')?.value || '';
-    const proxy = document.getElementById('add-proxy')?.value.trim() || '';
+    const proxy = document.getElementById('add-proxy')?.value.trim() || document.getElementById('add-proxy-select')?.value || '';
 
     if (!cookie && !psid) {
         showToast('请粘贴完整 Cookie 或填写 __Secure-1PSID', 'warning');
@@ -838,6 +886,21 @@ function openUpdateCookieModal(accountId, label) {
     const modal = document.getElementById('updateCookieModal');
     const title = document.getElementById('updateCookieTitle');
     if (title) title.textContent = `登录配置 / Cookie - ${label || accountId}`;
+    const account = _accountsCache.find(a => a.id === accountId);
+    const proxy = account?.proxy || '';
+    _updateInitialProxy = proxy;
+    const proxySelect = document.getElementById('update-proxy-select');
+    const proxyInput = document.getElementById('update-proxy');
+    if (proxySelect) {
+        if (proxy && !Array.from(proxySelect.options).some(option => option.value === proxy)) {
+            const option = document.createElement('option');
+            option.value = proxy;
+            option.textContent = `${proxy}（当前绑定，未纳入代理池）`;
+            proxySelect.appendChild(option);
+        }
+        proxySelect.value = proxy;
+    }
+    if (proxyInput) proxyInput.value = '';
     if (modal) modal.classList.add('active');
 }
 
@@ -855,14 +918,17 @@ async function submitUpdateCookie() {
     const cookie = document.getElementById('update-cookie')?.value.trim() || '';
     const psid = document.getElementById('update-psid')?.value.trim();
     const psidts = document.getElementById('update-psidts')?.value.trim() || '';
-    const proxy = document.getElementById('update-proxy')?.value.trim() || '';
+    const proxyManual = document.getElementById('update-proxy')?.value.trim() || '';
+    const proxySelected = document.getElementById('update-proxy-select')?.value || '';
+    const proxy = proxyManual || proxySelected;
+    const proxyChanged = proxy !== _updateInitialProxy;
     const email = document.getElementById('update-email')?.value.trim() || '';
     const password = document.getElementById('update-password')?.value || '';
     const totp_secret = document.getElementById('update-totp')?.value || '';
     const totp_url = document.getElementById('update-totp-url')?.value.trim() || '';
     const totp_key = document.getElementById('update-totp-key')?.value || '';
 
-    if ((!cookie && !psid) && !(email && password)) {
+    if ((!cookie && !psid) && !(email && password) && !proxyChanged) {
         showToast('请填写 Cookie，或同时填写自动重登邮箱和密码', 'warning');
         return;
     }
@@ -882,6 +948,9 @@ async function submitUpdateCookie() {
         const payload = cookie ? { cookie } : { psid, psidts };
         if (proxy) payload.proxy = proxy;
         if (cookie || psid) await apiCall('PUT', `/admin/accounts/${updateCookieAccountId}/cookies`, payload);
+        if (proxyChanged && !(cookie || psid)) {
+            await apiCall('PATCH', `/admin/accounts/${updateCookieAccountId}`, { proxy: proxy || '' });
+        }
         if (email && password) {
             await apiCall('PUT', `/admin/accounts/${updateCookieAccountId}/credentials`, { email, password, totp_secret: totp_secret || null, totp_url: totp_url || null, totp_key: totp_key || null, proxy: proxy || null });
         }
@@ -1457,10 +1526,28 @@ async function handleCheckUpdate() {
 }
 
 // ============================================================================
+// Proxy Manager
+// ============================================================================
+
+// ============================================================================
 // Event Listeners
 // ============================================================================
 
 function initEventListeners() {
+    const proxyManagerBtn = document.getElementById('proxyManagerBtn');
+    if (proxyManagerBtn) proxyManagerBtn.addEventListener('click', openProxyManagerModal);
+    const proxyManagerModal = document.getElementById('proxyManagerModal');
+    if (proxyManagerModal) {
+        proxyManagerModal.querySelectorAll('.modal-close, .modal-cancel').forEach(btn => btn.addEventListener('click', closeProxyManagerModal));
+        proxyManagerModal.addEventListener('click', e => { if (e.target === proxyManagerModal) closeProxyManagerModal(); });
+        const importBtn = document.getElementById('importProxiesBtn');
+        if (importBtn) importBtn.addEventListener('click', importProxies);
+    }
+    document.querySelectorAll('.proxy-select').forEach(select => select.addEventListener('change', () => {
+        const manual = select.id === 'add-proxy-select' ? document.getElementById('add-proxy') : document.getElementById('update-proxy');
+        if (manual && select.value) manual.value = select.value;
+    }));
+
     // Add account button
     const addAccountBtn = document.getElementById('addAccountBtn');
     if (addAccountBtn) {

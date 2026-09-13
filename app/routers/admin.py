@@ -14,6 +14,8 @@ from pydantic import BaseModel
 
 from app.config import APP_VERSION, mask_secret
 from app.core.account_pool import account_pool, _normalize_authuser
+from app.core.proxy_store import proxy_store
+from app.utils.proxy import normalize_proxy
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -198,6 +200,42 @@ async def health_history():
 @router.get("/accounts")
 async def list_accounts():
     return _masked_status()
+
+
+@router.get("/proxies")
+async def list_proxies():
+    """List managed proxies and the accounts currently assigned to each one."""
+    accounts = account_pool.accounts
+    result = []
+    for item in proxy_store.list():
+        proxy = item.get("proxy") or ""
+        assigned = [a for a in accounts if normalize_proxy(a.proxy) == proxy]
+        result.append({
+            **item,
+            "assigned_count": len(assigned),
+            "assigned_accounts": [{"id": a.id, "label": a.label} for a in assigned],
+        })
+    return {"proxies": result}
+
+
+class ProxyImportRequest(BaseModel):
+    # Accept either newline-separated text or a JSON array for API/automation use.
+    proxies: str | list[str]
+
+
+@router.post("/proxies/import")
+async def import_proxies(req: ProxyImportRequest):
+    values = req.proxies if isinstance(req.proxies, list) else req.proxies.splitlines()
+    added, total = proxy_store.import_values(values)
+    return {"status": "ok", "added": len(added), "total": total, "proxies": added}
+
+
+@router.delete("/proxies/{proxy_id}")
+async def delete_proxy(proxy_id: str):
+    # Deleting inventory never unassigns accounts; the account keeps its explicit proxy.
+    if proxy_store.remove(proxy_id):
+        return {"status": "ok"}
+    return JSONResponse(status_code=404, content={"error": {"message": "Proxy not found", "type": "not_found"}})
 
 
 @router.post("/accounts")
