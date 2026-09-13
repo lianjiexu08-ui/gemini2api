@@ -317,6 +317,12 @@ async def preview_account(req: PreviewAccountRequest):
             await client.shutdown()
         except Exception:
             pass
+    # 邮箱是用户可见的稳定身份；兼容旧记录没有 authuser 的情况。
+    if email and not duplicate:
+        duplicate = next(
+            (a for a in account_pool.accounts if (a.label or "").strip().lower() == email.strip().lower()),
+            None,
+        )
     return {
         "valid": valid,
         "email": email,
@@ -492,4 +498,3 @@ async def cleanup_web_chats(req: CleanupWebChatsRequest = None):
     _cleanup_bg_tasks.add(task)
     task.add_done_callback(_cleanup_bg_tasks.discard)
     return {"status": "started", "message": "清理已在后台开始，结果见服务端日志"}
-

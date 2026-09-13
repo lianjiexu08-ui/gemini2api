@@ -159,7 +159,7 @@ $('capture').addEventListener('click', async () => {
             return;
         }
         if (preview.duplicate_of) {
-            showStatus(`→ ${who}\n⚠ 该账号已在号池中（${preview.duplicate_of}），无需重复上号`, 'warn');
+            showStatus(`⚠ ${who} 已在号池：${preview.duplicate_of}，无需重复添加`, 'warn');
             pendingCookie = null;
             return;
         }
