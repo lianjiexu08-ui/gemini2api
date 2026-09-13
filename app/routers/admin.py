@@ -4,6 +4,7 @@ import os
 import platform
 import sys
 import time
+import json
 from datetime import datetime
 from typing import Optional
 
@@ -358,6 +359,18 @@ async def test_account_generation(account_id: str, req: TestAccountRequest):
             content={"error": {"message": f"Account {account_id} not found", "type": "not_found"}},
         )
     return result
+
+
+@router.post("/accounts/{account_id}/relogin")
+async def request_account_relogin(account_id: str):
+    """Queue a server-side Playwright relogin for the refresher container."""
+    if not any(a.id == account_id for a in account_pool.accounts):
+        return JSONResponse(status_code=404, content={"error": {"message": "account not found", "type": "not_found"}})
+    from pathlib import Path
+    task_dir = Path("data/relogin_requests")
+    task_dir.mkdir(parents=True, exist_ok=True)
+    (task_dir / f"{account_id}.json").write_text(json.dumps({"account_id": account_id, "requested_at": time.time()}))
+    return {"status": "queued", "message": "server Playwright relogin queued"}
 
 
 @router.put("/accounts/{account_id}/credentials")

@@ -481,10 +481,9 @@ async function loadAccounts() {
                 const authuser = btn.dataset.authuser;
                 const path = authuser ? `/u/${encodeURIComponent(authuser)}/app` : '/app';
                 window.open(`https://gemini.google.com${path}`, '_blank', 'noopener');
-                fetch('http://127.0.0.1:17891/relogin', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({account_id: accountId})})
-                    .then(r => r.json().then(x => ({ok: r.ok, x})))
-                    .then(({ok, x}) => showToast(ok ? '已触发本机自动重登' : `本机 Helper：${x.error || '未运行'}`, ok ? 'success' : 'warning'))
-                    .catch(() => showToast('请先在本机运行 relogin_helper.py serve', 'warning'));
+                apiCall('POST', `/admin/accounts/${accountId}/relogin`)
+                    .then(() => showToast('已加入服务器 Playwright 重登队列', 'success'))
+                    .catch(() => showToast('服务器重登队列不可用，请检查 Playwright 刷新器', 'warning'));
             });
         });
         container.querySelectorAll('.acc-edit-btn').forEach(btn => {
